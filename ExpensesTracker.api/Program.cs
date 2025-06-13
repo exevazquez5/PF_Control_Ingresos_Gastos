@@ -1,4 +1,5 @@
 using ExpensesTracker.api.Data;
+using ExpensesTracker.api.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,9 +13,22 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Add services to the container.
 
+// Registrar servicios de aplicación
+builder.Services.AddScoped<IExpenseService, ExpenseService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
+
+// Registrar Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 builder.Services.AddControllers();
 
 var app = builder.Build();
+
+// Usar Swagger
+app.UseSwagger();
+app.UseSwaggerUI();
 
 // Configure the HTTP request pipeline.
 
