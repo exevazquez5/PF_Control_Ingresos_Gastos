@@ -1,4 +1,5 @@
-﻿using ExpensesTracker.api.Interfaces;
+﻿using ExpensesTracker.api.DTOs.Category;
+using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -17,7 +18,14 @@ public class CategoriesController : ControllerBase
     public async Task<IActionResult> GetAll()
     {
         var categories = await _categoryService.GetAllAsync();
-        return Ok(categories);
+
+        var categoryDtos = categories.Select(c => new CategoryDto
+        {
+            Id = c.Id,
+            Name = c.Name
+        });
+
+        return Ok(categoryDtos);
     }
 
     [HttpGet("{id}")]
@@ -25,26 +33,52 @@ public class CategoriesController : ControllerBase
     {
         var category = await _categoryService.GetByIdAsync(id);
         if (category == null) return NotFound();
-        return Ok(category);
+
+        var dto = new CategoryDto
+        {
+            Id = category.Id,
+            Name = category.Name
+        };
+
+        return Ok(dto);
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] Category category)
+    public async Task<IActionResult> Create([FromBody] CreateCategoryDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
+        var category = new Category
+        {
+            Name = dto.Name
+        };
+
         var created = await _categoryService.CreateAsync(category);
-        return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
+
+        var result = new CategoryDto
+        {
+            Id = created.Id,
+            Name = created.Name
+        };
+
+        return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
     [HttpPut("{id}")]
-    public async Task<IActionResult> Update(int id, [FromBody] Category category)
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateCategoryDto dto)
     {
-        if (id != category.Id) return BadRequest("ID mismatch");
+        if (id != dto.Id) return BadRequest("ID mismatch");
         if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var category = new Category
+        {
+            Id = dto.Id,
+            Name = dto.Name
+        };
 
         var updated = await _categoryService.UpdateAsync(category);
         if (!updated) return NotFound();
+
         return NoContent();
     }
 

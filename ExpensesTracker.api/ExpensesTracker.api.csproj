@@ -19,9 +19,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="DTOs\" />
+    <Folder Include="DTOs\Expense\" />
     <Folder Include="Mappings\" />
-    <Folder Include="Helpers\" />
     <Folder Include="Validators\" />
   </ItemGroup>
 
