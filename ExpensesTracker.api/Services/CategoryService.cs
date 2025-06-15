@@ -14,28 +14,36 @@ public class CategoryService : ICategoryService
 
     public async Task<IEnumerable<Category>> GetAllAsync()
     {
-        return await _context.Categories.ToListAsync();
+        return await _context.Categories
+            .Include(c => c.Expenses)
+            .ThenInclude(e => e.User) // opcional: incluir también el usuario que hizo cada gasto
+            .ToListAsync();
     }
 
-    public async Task<Category?> GetByIdAsync(int id)
+    public async Task<Category> GetByIdAsync(int id)
     {
-        return await _context.Categories.FindAsync(id);
+        return await _context.Categories
+            .Include(c => c.Expenses)
+            .ThenInclude(e => e.User)
+            .FirstOrDefaultAsync(c => c.Id == id);
     }
 
     public async Task<Category> CreateAsync(Category category)
     {
         _context.Categories.Add(category);
         await _context.SaveChangesAsync();
+
         return category;
     }
 
     public async Task<bool> UpdateAsync(Category category)
     {
-        if (!await _context.Categories.AnyAsync(c => c.Id == category.Id))
-            return false;
+        var existing = await _context.Categories.FindAsync(category.Id);
+        if (existing == null) return false;
 
-        _context.Categories.Update(category);
+        existing.Name = category.Name;
         await _context.SaveChangesAsync();
+
         return true;
     }
 
@@ -46,6 +54,7 @@ public class CategoryService : ICategoryService
 
         _context.Categories.Remove(category);
         await _context.SaveChangesAsync();
+
         return true;
     }
 }

@@ -14,28 +14,36 @@ public class UserService : IUserService
 
     public async Task<IEnumerable<User>> GetAllAsync()
     {
-        return await _context.Users.ToListAsync();
+        return await _context.Users
+            .Include(u => u.Expenses)
+            .ThenInclude(e => e.Category) // opcional: incluir también la categoría de cada gasto
+            .ToListAsync();
     }
 
-    public async Task<User?> GetByIdAsync(int id)
+    public async Task<User> GetByIdAsync(int id)
     {
-        return await _context.Users.FindAsync(id);
+        return await _context.Users
+            .Include(u => u.Expenses)
+            .ThenInclude(e => e.Category)
+            .FirstOrDefaultAsync(u => u.Id == id);
     }
 
     public async Task<User> CreateAsync(User user)
     {
         _context.Users.Add(user);
         await _context.SaveChangesAsync();
+
         return user;
     }
 
     public async Task<bool> UpdateAsync(User user)
     {
-        if (!await _context.Users.AnyAsync(u => u.Id == user.Id))
-            return false;
+        var existing = await _context.Users.FindAsync(user.Id);
+        if (existing == null) return false;
 
-        _context.Users.Update(user);
+        existing.Username = user.Username;
         await _context.SaveChangesAsync();
+
         return true;
     }
 

@@ -14,18 +14,29 @@ public class ExpenseService : IExpenseService
 
     public async Task<IEnumerable<Expense>> GetAllAsync()
     {
-        return await _context.Expenses.ToListAsync();
+        return await _context.Expenses
+            .Include(e => e.Category)
+            .Include(e => e.User)
+            .ToListAsync();
     }
 
     public async Task<Expense> GetByIdAsync(int id)
     {
-        return await _context.Expenses.FindAsync(id);
+        return await _context.Expenses
+            .Include(e => e.Category)
+            .Include(e => e.User)
+            .FirstOrDefaultAsync(e => e.Id == id);
     }
 
     public async Task<Expense> CreateAsync(Expense expense)
     {
         _context.Expenses.Add(expense);
         await _context.SaveChangesAsync();
+
+        // Cargar relaciones después de guardar
+        await _context.Entry(expense).Reference(e => e.Category).LoadAsync();
+        await _context.Entry(expense).Reference(e => e.User).LoadAsync();
+
         return expense;
     }
 
@@ -34,10 +45,11 @@ public class ExpenseService : IExpenseService
         var existing = await _context.Expenses.FindAsync(expense.Id);
         if (existing == null) return false;
 
-        // Aquí actualizarías propiedades
         existing.Description = expense.Description;
         existing.Amount = expense.Amount;
         existing.Date = expense.Date;
+        existing.CategoryId = expense.CategoryId;
+        existing.UserId = expense.UserId;
 
         await _context.SaveChangesAsync();
         return true;
