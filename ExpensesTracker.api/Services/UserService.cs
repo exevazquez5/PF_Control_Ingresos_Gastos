@@ -28,6 +28,11 @@ public class UserService : IUserService
             .FirstOrDefaultAsync(u => u.Id == id);
     }
 
+    public async Task<User?> GetByUsernameAsync(string username)
+    {
+        return await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
+    }
+
     public async Task<User> CreateAsync(User user)
     {
         _context.Users.Add(user);
@@ -35,6 +40,7 @@ public class UserService : IUserService
 
         return user;
     }
+
 
     public async Task<bool> UpdateAsync(User user)
     {
@@ -46,6 +52,7 @@ public class UserService : IUserService
 
         return true;
     }
+
 
     public async Task<bool> DeleteAsync(int id)
     {

@@ -1,8 +1,15 @@
 using ExpensesTracker.api.Data;
 using ExpensesTracker.api.Interfaces;
+using ExpensesTracker.api.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Leer la clave secreta para JWT desde la configuración
+var key = Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]);
 
 // Leer la cadena de conexión
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -11,14 +18,14 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(connectionString));
 
-// Add services to the container.
-
-// Registrar servicios de aplicación
+// Registrar servicios
 builder.Services.AddScoped<IExpenseService, ExpenseService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IIncomeService, IncomeService>();
 
-// Registrar CORS
+// CORS
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -29,32 +36,45 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Registrar Swagger
+// Autenticación JWT
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(key)
+    };
+});
+
+// Swagger
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// Controladores
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// Usar Swagger
-app.UseSwagger();
-app.UseSwaggerUI();
-
-// Usar CORS
-app.UseCors("AllowAll");
-
-app.UseAuthorization();
-
-app.MapControllers();
-
-app.Run();
-
-// Configure the HTTP request pipeline.
-
+// Middleware
 app.UseHttpsRedirection();
 
+app.UseCors("AllowAll");
+
+app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.MapControllers();
 

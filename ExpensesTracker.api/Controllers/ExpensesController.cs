@@ -1,6 +1,7 @@
 ﻿using ExpensesTracker.api.Dtos.Expense;
 using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 [ApiController]
@@ -105,7 +106,7 @@ public class ExpensesController : ControllerBase
         var updated = await _expenseService.UpdateAsync(expense);
         if (!updated) return NotFound();
 
-        return NoContent();
+        return Ok(dto);
     }
 
     [HttpDelete("{id}")]
