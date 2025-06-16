@@ -4,6 +4,7 @@ using ExpensesTracker.api.DTOs.Login;
 using ExpensesTracker.api.Helpers;
 using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -19,6 +20,7 @@ public class UsersController : ControllerBase
         _tokenService = tokenService;
     }
 
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -33,6 +35,7 @@ public class UsersController : ControllerBase
         return Ok(userDtos);
     }
 
+    [Authorize]
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
@@ -48,7 +51,8 @@ public class UsersController : ControllerBase
         return Ok(userDto);
     }
 
-    [HttpPost]
+    [AllowAnonymous]
+    [HttpPost("register")]
     public async Task<IActionResult> Create([FromBody] CreateUserDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
@@ -60,7 +64,9 @@ public class UsersController : ControllerBase
         {
             Username = dto.Username,
             PasswordHash = passwordHash,
-            PasswordSalt = passwordSalt // <== agregamos esta propiedad en el modelo User
+            PasswordSalt = passwordSalt,
+            Role =  "User"
+            //Role = dto.Role ?? "User" // Asignar rol por defecto si no se especifica
         };
 
 
@@ -75,6 +81,7 @@ public class UsersController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
 
+    [AllowAnonymous]
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
@@ -93,6 +100,7 @@ public class UsersController : ControllerBase
         return Ok(new { Token = token });
     }
 
+    [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateUserDto dto)
     {
@@ -112,7 +120,7 @@ public class UsersController : ControllerBase
         return NoContent();
     }
 
-
+    [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {

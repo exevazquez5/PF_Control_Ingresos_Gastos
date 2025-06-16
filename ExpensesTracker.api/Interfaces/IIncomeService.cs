@@ -7,6 +7,7 @@ public interface IIncomeService
 {
     Task<List<Income>> GetAll();
     Task<Income?> GetById(int id);
+    Task<List<Income>> GetByUserId(int userId);
     Task<Income> Create(Income income);
     Task<bool> Update(Income income);
     Task Delete(int id);

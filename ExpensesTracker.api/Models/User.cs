@@ -2,10 +2,11 @@
 {
     public class User
     {
-        public int Id { get; set; }  // Clave primaria
+        public int Id { get; set; }
         public string Username { get; set; } = string.Empty;
-        public byte[] PasswordHash { get; set; }  // Contraseña encriptada
+        public byte[] PasswordHash { get; set; } 
         public byte[] PasswordSalt { get; set; }
         public ICollection<Expense> Expenses { get; set; }
+        public string Role { get; set; } = "User";
     }
 }

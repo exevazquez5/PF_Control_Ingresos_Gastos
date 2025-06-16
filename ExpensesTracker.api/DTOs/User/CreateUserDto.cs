@@ -9,4 +9,6 @@ public class CreateUserDto
 
     [Required]
     public string Password { get; set; }
+
+    //public string Role { get; set; } = "User"; // Default role is User
 }

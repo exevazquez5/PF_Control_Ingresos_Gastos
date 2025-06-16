@@ -5,6 +5,9 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace ExpensesTracker.api.Controllers
 {
@@ -20,9 +23,29 @@ namespace ExpensesTracker.api.Controllers
         }
 
         [HttpGet]
+        [Authorize]
         public async Task<ActionResult<List<IncomeDto>>> GetAll()
         {
-            var incomes = await _incomeService.GetAll();
+            // Obtener ID del usuario desde el JWT
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null)
+            {
+                return Unauthorized("Token inválido: no contiene el claim 'nameidentifier'.");
+            }
+            if (!int.TryParse(subClaim.Value, out var userId))
+            {
+                return Unauthorized("Token inválido: el claim 'nameidentifier' no es un entero válido.");
+            }
+
+            // Verificar si tiene el rol Admin
+            var isAdmin = User.IsInRole("Admin");
+
+            // Obtener ingresos según rol
+            var incomes = isAdmin
+                ? await _incomeService.GetAll()
+                : await _incomeService.GetByUserId(userId);
+
+            // Mapear a DTO
             var result = incomes.Select(i => new IncomeDto
             {
                 Id = i.Id,
@@ -38,6 +61,7 @@ namespace ExpensesTracker.api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpGet("{id}")]
         public async Task<ActionResult<IncomeDto>> Get(int id)
         {
@@ -59,6 +83,7 @@ namespace ExpensesTracker.api.Controllers
             return Ok(dto);
         }
 
+        [Authorize]
         [HttpGet("summary/{userId}")]
         public async Task<ActionResult<object>> GetSummary(int userId)
         {
@@ -66,6 +91,7 @@ namespace ExpensesTracker.api.Controllers
             return Ok(summary);
         }
 
+        [Authorize]
         [HttpGet("filter")]
         public async Task<ActionResult<List<IncomeDto>>> Filter(
             [FromQuery] int? userId,
@@ -90,6 +116,7 @@ namespace ExpensesTracker.api.Controllers
             return Ok(result);
         }
 
+        [Authorize]
         [HttpPost]
         public async Task<ActionResult<IncomeDto>> Create([FromBody] CreateIncomeDto dto)
         {
@@ -119,6 +146,7 @@ namespace ExpensesTracker.api.Controllers
             return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
         }
 
+        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> Update(int id, [FromBody] UpdateIncomeDto dto)
         {
@@ -142,6 +170,7 @@ namespace ExpensesTracker.api.Controllers
             return NoContent();
         }
 
+        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {

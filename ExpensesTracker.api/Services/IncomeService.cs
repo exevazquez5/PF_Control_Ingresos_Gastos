@@ -32,6 +32,15 @@ public class IncomeService : IIncomeService
             .FirstOrDefaultAsync(i => i.Id == id);
     }
 
+    public async Task<List<Income>> GetByUserId(int userId)
+    {
+        return await _context.Incomes
+            .Include(i => i.Category)
+            .Include(i => i.User)
+            .Where(i => i.UserId == userId)
+            .ToListAsync();
+    }
+
     public async Task<Income> Create(Income income)
     {
         _context.Incomes.Add(income);

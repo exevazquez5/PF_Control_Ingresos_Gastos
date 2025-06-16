@@ -15,6 +15,7 @@ public class ExpensesController : ControllerBase
         _expenseService = expenseService;
     }
 
+    [Authorize]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -35,6 +36,7 @@ public class ExpensesController : ControllerBase
         return Ok(expenseDtos);
     }
 
+    [Authorize]
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
@@ -56,6 +58,7 @@ public class ExpensesController : ControllerBase
         return Ok(expenseDto);
     }
 
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateExpenseDto dto)
     {
@@ -87,6 +90,7 @@ public class ExpensesController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = resultDto.Id }, resultDto);
     }
 
+    [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateExpenseDto dto)
     {
@@ -109,6 +113,7 @@ public class ExpensesController : ControllerBase
         return Ok(dto);
     }
 
+    [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
