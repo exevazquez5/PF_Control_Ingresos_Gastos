@@ -3,6 +3,7 @@ using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -50,7 +51,11 @@ public class CategoriesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCategoryDto dto)
     {
-        if (!ModelState.IsValid) return BadRequest(ModelState);
+        var isAdmin = User.IsInRole("Admin");
+        if (!isAdmin)
+        {
+            return StatusCode(403, "Solo un Admin puede crear categorías.");
+        }
 
         var category = new Category
         {
@@ -72,8 +77,15 @@ public class CategoriesController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateCategoryDto dto)
     {
-        if (id != dto.Id) return BadRequest("ID mismatch");
+        if (id != dto.Id) return BadRequest("ID mismatch.");
         if (!ModelState.IsValid) return BadRequest(ModelState);
+
+        var originalCategory = await _categoryService.GetByIdAsync(id);
+        if (originalCategory == null) return NotFound();
+
+        var isAdmin = User.IsInRole("Admin");
+        if (!isAdmin)
+            return StatusCode(403, "Solo un Admin puede modificar categorías.");
 
         var category = new Category
         {
@@ -82,7 +94,7 @@ public class CategoriesController : ControllerBase
         };
 
         var updated = await _categoryService.UpdateAsync(category);
-        if (!updated) return NotFound();
+        if (!updated) return StatusCode(500, "Error al actualizar la categoría.");
 
         return NoContent();
     }
@@ -91,8 +103,16 @@ public class CategoriesController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
+        var originalCategory = await _categoryService.GetByIdAsync(id);
+        if (originalCategory == null) return NotFound();
+
+        var isAdmin = User.IsInRole("Admin");
+        if (!isAdmin)
+            return StatusCode(403, "Solo un Admin puede eliminar categorías.");
+
         var deleted = await _categoryService.DeleteAsync(id);
-        if (!deleted) return NotFound();
+        if (!deleted) return StatusCode(500, "Error al eliminar la categoría.");
+
         return NoContent();
     }
 }

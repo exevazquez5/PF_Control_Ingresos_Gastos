@@ -1,12 +1,11 @@
-﻿using ExpensesTracker.api.Data;
-using ExpensesTracker.api.Dtos.User;
+﻿using ExpensesTracker.api.Dtos.User;
 using ExpensesTracker.api.DTOs.Login;
 using ExpensesTracker.api.Helpers;
 using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -14,16 +13,22 @@ public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly ITokenService _tokenService;
+
     public UsersController(IUserService userService, ITokenService tokenService)
     {
         _userService = userService;
         _tokenService = tokenService;
     }
 
+    private bool IsAdmin() => User.IsInRole("Admin");
+
     [Authorize]
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
+        if (!IsAdmin())
+            return StatusCode(403, "Solo un Admin puede ver todos los usuarios.");
+
         var users = await _userService.GetAllAsync();
 
         var userDtos = users.Select(u => new UserDto
@@ -39,6 +44,13 @@ public class UsersController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
+            return Unauthorized("Token inválido.");
+
+        if (!IsAdmin() && userIdFromToken != id)
+            return StatusCode(403, "No puedes acceder a los datos de otro usuario.");
+
         var user = await _userService.GetByIdAsync(id);
         if (user == null) return NotFound();
 
@@ -65,10 +77,8 @@ public class UsersController : ControllerBase
             Username = dto.Username,
             PasswordHash = passwordHash,
             PasswordSalt = passwordSalt,
-            Role =  "User"
-            //Role = dto.Role ?? "User" // Asignar rol por defecto si no se especifica
+            Role = "User" // Forzamos a que todos se registren como "User"
         };
-
 
         var created = await _userService.CreateAsync(user);
 
@@ -85,18 +95,12 @@ public class UsersController : ControllerBase
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginDto dto)
     {
-        // 1. Buscar usuario por username
         var user = await _userService.GetByUsernameAsync(dto.Username);
-        if (user == null) return Unauthorized("Usuario o contraseña incorrectos");
-
-        // 2. Verificar contraseña (compara hash y salt)
-        if (!PasswordHelper.VerifyPassword(dto.Password, user.PasswordHash, user.PasswordSalt))
+        if (user == null || !PasswordHelper.VerifyPassword(dto.Password, user.PasswordHash, user.PasswordSalt))
             return Unauthorized("Usuario o contraseña incorrectos");
 
-        // 3. Generar token JWT
         var token = _tokenService.GenerateToken(user);
 
-        // 4. Retornar token
         return Ok(new { Token = token });
     }
 
@@ -107,11 +111,17 @@ public class UsersController : ControllerBase
         if (id != dto.Id) return BadRequest("ID mismatch");
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
+            return Unauthorized("Token inválido.");
+
+        if (!IsAdmin() && userIdFromToken != id)
+            return StatusCode(403, "No tienes permiso para modificar a otro usuario.");
+
         var user = new User
         {
             Id = dto.Id,
             Username = dto.Username
-            // No cambiamos PasswordHash ni Expenses
         };
 
         var updated = await _userService.UpdateAsync(user);
@@ -124,8 +134,12 @@ public class UsersController : ControllerBase
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
+        if (!IsAdmin())
+            return StatusCode(403, "Solo un Admin puede eliminar usuarios.");
+
         var deleted = await _userService.DeleteAsync(id);
         if (!deleted) return NotFound();
+
         return NoContent();
     }
 }

@@ -27,7 +27,16 @@ public class ExpenseService : IExpenseService
             .Include(e => e.User)
             .FirstOrDefaultAsync(e => e.Id == id);
     }
-
+    
+    public async Task<List<Expense>> GetByUserId(int userId)
+    {
+        return await _context.Expenses
+            .Include(e => e.Category)
+            .Include(e => e.User)
+            .Where(e => e.UserId == userId)
+            .ToListAsync();
+    }
+    
     public async Task<Expense> CreateAsync(Expense expense)
     {
         _context.Expenses.Add(expense);

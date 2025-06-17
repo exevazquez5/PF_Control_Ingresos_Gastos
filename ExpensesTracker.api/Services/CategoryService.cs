@@ -16,7 +16,7 @@ public class CategoryService : ICategoryService
     {
         return await _context.Categories
             .Include(c => c.Expenses)
-            .ThenInclude(e => e.User) // opcional: incluir también el usuario que hizo cada gasto
+            .ThenInclude(e => e.User)
             .ToListAsync();
     }
 
@@ -26,6 +26,15 @@ public class CategoryService : ICategoryService
             .Include(c => c.Expenses)
             .ThenInclude(e => e.User)
             .FirstOrDefaultAsync(c => c.Id == id);
+    }
+
+    public async Task<List<Category>> GetByUserId(int userId)
+    {
+        return await _context.Categories
+            .Include(c => c.Expenses.Where(e => e.UserId == userId))
+            .ThenInclude(e => e.User)
+            .Where(c => c.Expenses.Any(e => e.UserId == userId))
+            .ToListAsync();
     }
 
     public async Task<Category> CreateAsync(Category category)

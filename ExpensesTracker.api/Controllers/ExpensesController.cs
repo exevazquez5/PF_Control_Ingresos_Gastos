@@ -3,6 +3,7 @@ using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -19,8 +20,27 @@ public class ExpensesController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
-        var expenses = await _expenseService.GetAllAsync();
+        // Obtener ID del usuario desde el JWT
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null)
+        {
+            return Unauthorized("Token inválido: no contiene el claim 'nameidentifier'.");
+        }
 
+        if (!int.TryParse(subClaim.Value, out var userId))
+        {
+            return Unauthorized("Token inválido: el claim 'nameidentifier' no es un entero válido.");
+        }
+
+        // Verificar si tiene el rol Admin
+        var isAdmin = User.IsInRole("Admin");
+
+        // Obtener gastos según rol
+        var expenses = isAdmin
+            ? await _expenseService.GetAllAsync()
+            : await _expenseService.GetByUserId(userId);
+
+        // Mapear a DTO
         var expenseDtos = expenses.Select(e => new ExpenseDto
         {
             Id = e.Id,
@@ -31,31 +51,42 @@ public class ExpensesController : ControllerBase
             CategoryName = e.Category?.Name ?? "N/A",
             UserId = e.UserId,
             Username = e.User?.Username ?? "N/A"
-        });
+        }).ToList();
 
         return Ok(expenseDtos);
     }
+
 
     [Authorize]
     [HttpGet("{id}")]
     public async Task<IActionResult> GetById(int id)
     {
-        var e = await _expenseService.GetByIdAsync(id);
-        if (e == null) return NotFound();
+        var expense = await _expenseService.GetByIdAsync(id);
+        if (expense == null) return NotFound();
 
-        var expenseDto = new ExpenseDto
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
+            return Unauthorized("Token inválido.");
+
+        var isAdmin = User.IsInRole("Admin");
+
+        if (!isAdmin && expense.UserId != userIdFromToken)
+            return StatusCode(403, "No puedes acceder a gastos de otro usuario.");
+
+
+        var dto = new ExpenseDto
         {
-            Id = e.Id,
-            Amount = e.Amount,
-            Description = e.Description,
-            Date = e.Date,
-            CategoryId = e.CategoryId,
-            CategoryName = e.Category?.Name ?? "N/A",
-            UserId = e.UserId,
-            Username = e.User?.Username ?? "N/A"
+            Id = expense.Id,
+            Amount = expense.Amount,
+            Description = expense.Description,
+            Date = expense.Date,
+            CategoryId = expense.CategoryId,
+            CategoryName = expense.Category?.Name ?? "N/A",
+            UserId = expense.UserId,
+            Username = expense.User?.Username ?? "N/A"
         };
 
-        return Ok(expenseDto);
+        return Ok(dto);
     }
 
     [Authorize]
@@ -64,13 +95,17 @@ public class ExpensesController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+            return Unauthorized("Token inválido.");
+
         var expense = new Expense
         {
             Amount = dto.Amount,
             Description = dto.Description,
             Date = dto.Date,
             CategoryId = dto.CategoryId,
-            UserId = dto.UserId
+            UserId = userId
         };
 
         var created = await _expenseService.CreateAsync(expense);
@@ -90,6 +125,7 @@ public class ExpensesController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = resultDto.Id }, resultDto);
     }
 
+
     [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateExpenseDto dto)
@@ -97,28 +133,51 @@ public class ExpensesController : ControllerBase
         if (id != dto.Id) return BadRequest("ID mismatch");
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
-        var expense = new Expense
-        {
-            Id = dto.Id,
-            Amount = dto.Amount,
-            Description = dto.Description,
-            Date = dto.Date,
-            CategoryId = dto.CategoryId,
-            UserId = dto.UserId
-        };
+        var originalExpense = await _expenseService.GetByIdAsync(id);
+        if (originalExpense == null) return NotFound();
 
-        var updated = await _expenseService.UpdateAsync(expense);
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
+            return Unauthorized("Token inválido.");
+
+        var isAdmin = User.IsInRole("Admin");
+
+        if (!isAdmin && originalExpense.UserId != userIdFromToken)
+            return StatusCode(403, "No puedes modificar gastos de otro usuario.");
+
+        originalExpense.Amount = dto.Amount;
+        originalExpense.Description = dto.Description;
+        originalExpense.Date = dto.Date;
+        originalExpense.CategoryId = dto.CategoryId;
+
+        var updated = await _expenseService.UpdateAsync(originalExpense);
         if (!updated) return NotFound();
 
         return Ok(dto);
     }
 
+
     [Authorize]
     [HttpDelete("{id}")]
     public async Task<IActionResult> Delete(int id)
     {
+        var expense = await _expenseService.GetByIdAsync(id);
+        if (expense == null) return NotFound();
+
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+            return Unauthorized("Token inválido.");
+
+        var isAdmin = User.IsInRole("Admin");
+
+        if (!isAdmin && expense.UserId != userId)
+            return StatusCode(403, "No puedes borrar gastos de otro usuario.");
+
+
         var deleted = await _expenseService.DeleteAsync(id);
         if (!deleted) return NotFound();
+
         return NoContent();
     }
+
 }

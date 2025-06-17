@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 public interface IIncomeService
 {
-    Task<List<Income>> GetAll();
+    Task<List<Income>> GetAllAsync();
     Task<Income?> GetById(int id);
     Task<List<Income>> GetByUserId(int userId);
     Task<Income> Create(Income income);

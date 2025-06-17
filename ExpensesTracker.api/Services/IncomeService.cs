@@ -16,7 +16,7 @@ public class IncomeService : IIncomeService
         _context = context;
     }
 
-    public async Task<List<Income>> GetAll()
+    public async Task<List<Income>> GetAllAsync()
     {
         return await _context.Incomes
             .Include(i => i.Category)
@@ -52,7 +52,6 @@ public class IncomeService : IIncomeService
             .Include(i => i.User)
             .FirstOrDefaultAsync(i => i.Id == income.Id);
     }
-
 
     public async Task<bool> Update(Income income)
     {

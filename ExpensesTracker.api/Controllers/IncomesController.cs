@@ -42,7 +42,7 @@ namespace ExpensesTracker.api.Controllers
 
             // Obtener ingresos según rol
             var incomes = isAdmin
-                ? await _incomeService.GetAll()
+                ? await _incomeService.GetAllAsync()
                 : await _incomeService.GetByUserId(userId);
 
             // Mapear a DTO
@@ -65,31 +65,51 @@ namespace ExpensesTracker.api.Controllers
         [HttpGet("{id}")]
         public async Task<ActionResult<IncomeDto>> Get(int id)
         {
-            var i = await _incomeService.GetById(id);
-            if (i == null) return NotFound();
+            var income = await _incomeService.GetById(id);
+            if (income == null) return NotFound();
+
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
+                return Unauthorized("Token inválido.");
+
+            var isAdmin = User.IsInRole("Admin");
+
+            if (!isAdmin && income.UserId != userIdFromToken)
+                return StatusCode(403, "No puedes acceder a ingresos de otro usuario.");
 
             var dto = new IncomeDto
             {
-                Id = i.Id,
-                Amount = i.Amount,
-                Description = i.Description,
-                Date = i.Date,
-                CategoryId = i.CategoryId,
-                CategoryName = i.Category?.Name,
-                UserId = i.UserId,
-                Username = i.User?.Username
+                Id = income.Id,
+                Amount = income.Amount,
+                Description = income.Description,
+                Date = income.Date,
+                CategoryId = income.CategoryId,
+                CategoryName = income.Category?.Name,
+                UserId = income.UserId,
+                Username = income.User?.Username
             };
 
             return Ok(dto);
         }
 
+
         [Authorize]
         [HttpGet("summary/{userId}")]
         public async Task<ActionResult<object>> GetSummary(int userId)
         {
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
+                return Unauthorized("Token inválido.");
+
+            var isAdmin = User.IsInRole("Admin");
+
+            if (!isAdmin && userId != userIdFromToken)
+                return StatusCode(403, "No tienes permiso para ver el resumen de otro usuario.");
+
             var summary = await _incomeService.GetSummaryByUser(userId);
             return Ok(summary);
         }
+
 
         [Authorize]
         [HttpGet("filter")]
@@ -99,6 +119,22 @@ namespace ExpensesTracker.api.Controllers
             [FromQuery] DateTime? from,
             [FromQuery] DateTime? to)
         {
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
+                return Unauthorized("Token inválido.");
+
+            var isAdmin = User.IsInRole("Admin");
+
+            // Validación: si NO es admin, solo puede filtrar su propio userId
+            if (!isAdmin)
+            {
+                if (userId.HasValue && userId != userIdFromToken)
+                    return StatusCode(403, "No tienes permiso para filtrar datos de otro usuario.");
+
+                // Si no se especificó userId, lo forzamos al del token
+                userId = userIdFromToken;
+            }
+
             var filtered = await _incomeService.Filter(userId, categoryId, from, to);
 
             var result = filtered.Select(i => new IncomeDto
@@ -116,17 +152,22 @@ namespace ExpensesTracker.api.Controllers
             return Ok(result);
         }
 
+
         [Authorize]
         [HttpPost]
         public async Task<ActionResult<IncomeDto>> Create([FromBody] CreateIncomeDto dto)
         {
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+                return Unauthorized("Token inválido.");
+
             var income = new Models.Income
             {
                 Amount = dto.Amount,
                 Description = dto.Description,
                 Date = dto.Date,
                 CategoryId = dto.CategoryId,
-                UserId = dto.UserId
+                UserId = userId
             };
 
             var created = await _incomeService.Create(income);
@@ -140,11 +181,12 @@ namespace ExpensesTracker.api.Controllers
                 CategoryId = created.CategoryId,
                 CategoryName = created.Category?.Name ?? "N/A",
                 UserId = created.UserId,
-                Username = created.User?.Username ?? "N/A" 
+                Username = created.User?.Username ?? "N/A"
             };
 
             return CreatedAtAction(nameof(Get), new { id = result.Id }, result);
         }
+
 
         [Authorize]
         [HttpPut("{id}")]
@@ -157,11 +199,19 @@ namespace ExpensesTracker.api.Controllers
             if (incomeToUpdate == null)
                 return NotFound();
 
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+                return Unauthorized();
+
+            var isAdmin = User.IsInRole("Admin");
+
+            if (!isAdmin && incomeToUpdate.UserId != userId)
+                return StatusCode(403, "No puedes modificar ingresos de otro usuario.");
+
             incomeToUpdate.Amount = dto.Amount;
             incomeToUpdate.Description = dto.Description;
             incomeToUpdate.Date = dto.Date;
             incomeToUpdate.CategoryId = dto.CategoryId;
-            incomeToUpdate.UserId = dto.UserId;
 
             var updated = await _incomeService.Update(incomeToUpdate);
             if (!updated)
@@ -170,16 +220,26 @@ namespace ExpensesTracker.api.Controllers
             return NoContent();
         }
 
+
         [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
             var income = await _incomeService.GetById(id);
-            if (income == null)
-                return NotFound();
+            if (income == null) return NotFound();
+
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+                return Unauthorized();
+
+            var isAdmin = User.IsInRole("Admin");
+
+            if (!isAdmin && income.UserId != userId)
+                return StatusCode(403, "No puedes eliminar ingresos de otro usuario.");
 
             await _incomeService.Delete(id);
             return NoContent();
         }
+
     }
 }
