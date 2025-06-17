@@ -9,6 +9,7 @@ using System.Security.Claims;
 
 [ApiController]
 [Route("api/[controller]")]
+
 public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
@@ -68,6 +69,13 @@ public class UsersController : ControllerBase
     public async Task<IActionResult> Create([FromBody] CreateUserDto dto)
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
+        if (!IsPasswordValid(dto.Password))
+            return BadRequest("La contraseña debe tener al menos 8 caracteres, incluir una mayúscula, una minúscula y un número.");
+
+        // Validar si el usuario ya existe
+        var existingUser = await _userService.GetByUsernameAsync(dto.Username);
+        if (existingUser != null)
+            return Conflict("El nombre de usuario ya está en uso.");
 
         byte[] passwordSalt;
         var passwordHash = PasswordHelper.HashPassword(dto.Password, out passwordSalt);
@@ -89,6 +97,18 @@ public class UsersController : ControllerBase
         };
 
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
+    }
+    // MÉTODO AUXILIAR PARA VALIDAR CONTRASEÑA
+    private bool IsPasswordValid(string password)
+    {
+        if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
+            return false;
+
+        bool hasUpper = password.Any(char.IsUpper);
+        bool hasLower = password.Any(char.IsLower);
+        bool hasDigit = password.Any(char.IsDigit);
+
+        return hasUpper && hasLower && hasDigit;
     }
 
     [AllowAnonymous]
