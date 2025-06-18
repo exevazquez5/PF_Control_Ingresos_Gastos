@@ -1,7 +1,7 @@
 import { useState } from "react";
 import axios from "axios";
-import { useNavigate } from 'react-router-dom';
 import { Eye, EyeOff, User, Lock, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -22,27 +22,40 @@ function Login() {
       password,
     });
 
-    const token = response.data.Token;
-    localStorage.setItem("token", token);
-    alert("Login exitoso");
+  //   const token = response.data.Token;
+  //   localStorage.setItem("token", token);
+  //   alert("Login exitoso");
 
-    // Simular pequeña espera (ej: redirección)
-    setTimeout(() => {
+  //   setTimeout(() => {
+  //     setLoading(false);
+  //     // Aquí podrías redirigir si usás react-router, ej: navigate('/dashboard');
+  //   }, 1500);
+
+  // } catch (err) {
+  //   if (err.response && err.response.status === 401) {
+  //     setError("Usuario o contraseña incorrectos");
+  //   } else if (err.response && err.response.data) {
+  //     setError(err.response.data);
+  //   } else {
+  //     setError("Error de conexión");
+  //   }
+  //   setLoading(false);
+  // }}
+
+  // si el login fue exitoso
+      if (res.status === 200) {
+        // guardar token si lo necesitás
+        localStorage.setItem("token", res.data.token);
+
+        // redirigir al dashboard
+        navigate('/dashboard'); // redirección
+      }
+    } catch (error) {
+      console.error("Error al iniciar sesión:", error);
+    } finally {
       setLoading(false);
-      // Aquí podrías redirigir si usás react-router, ej: navigate('/dashboard');
-    }, 1500);
-
-  } catch (err) {
-    if (err.response && err.response.status === 401) {
-      setError("Usuario o contraseña incorrectos");
-    } else if (err.response && err.response.data) {
-      setError(err.response.data);
-    } else {
-      setError("Error de conexión");
     }
-    setLoading(false);
-  }}
-
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-sky-900 to-slate-900 px-4">
@@ -156,9 +169,12 @@ function Login() {
           <div className="mt-10 text-center">
             <p className="text-gray-400 text-base">
               ¿No tienes una cuenta?{' '}
-              <a href="#" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
+              <span
+                onClick={() => navigate('/register')}
+                className="text-blue-400 hover:text-blue-300 font-medium transition-colors cursor-pointer"
+              >
                 Regístrate aquí
-              </a>
+              </span>
             </p>
           </div>
         </div>
