@@ -116,9 +116,13 @@ function Login() {
                 />
                 <span className="ml-2">Recordarme</span>
               </label>
-              <a href="#" className="text-blue-400 hover:text-blue-300 transition-colors">
-                ¿Olvidaste tu contraseña?
-              </a>
+              <span
+                onClick={() => navigate('/forgot-password')}
+                className="text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+              >
+                  ¿Olvidaste tu contraseña?
+              </span>
+
             </div>
 
             <button

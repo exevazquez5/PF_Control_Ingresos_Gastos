@@ -176,7 +176,7 @@ public class CategoriesController : ControllerBase
             return StatusCode(403, "Solo un Admin puede eliminar categorías.");
 
         var deleted = await _categoryService.DeleteAsync(id);
-        if (!deleted) return StatusCode(500, "Error al eliminar la categoría.");
+        if (!deleted) return BadRequest("No se puede eliminar la categoría porque está siendo utilizada por ingresos o gastos.");
 
         return NoContent();
     }
