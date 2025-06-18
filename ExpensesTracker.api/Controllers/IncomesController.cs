@@ -1,13 +1,14 @@
 using ExpensesTracker.api.Dtos.Income;
 using ExpensesTracker.api.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
 using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 namespace ExpensesTracker.api.Controllers
 {
@@ -16,10 +17,13 @@ namespace ExpensesTracker.api.Controllers
     public class IncomesController : ControllerBase
     {
         private readonly IIncomeService _incomeService;
+        private readonly ICategoryService _categoryService;
 
-        public IncomesController(IIncomeService incomeService)
+        public IncomesController(IIncomeService incomeService, ICategoryService categoryService)
         {
             _incomeService = incomeService;
+            _categoryService = categoryService;
+
         }
 
         [HttpGet]
@@ -161,6 +165,35 @@ namespace ExpensesTracker.api.Controllers
             if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
                 return Unauthorized("Token inválido.");
 
+            // ? Validar que el monto sea mayor a cero
+            if (dto.Amount <= 0)
+                return BadRequest("El monto debe ser mayor a cero.");
+
+            // ? Validar que el monto no tenga más de 2 decimales
+            if (decimal.Round(dto.Amount, 2) != dto.Amount)
+                return BadRequest("El monto no puede tener más de 2 decimales.");
+
+            // ? Validar que la descripción no esté vacía ni sea solo espacios
+            if (string.IsNullOrWhiteSpace(dto.Description))
+                return BadRequest("La descripción no puede estar vacía ni contener solo espacios.");
+
+            // ? Validar longitud de la descripción (mínimo 3, máximo 100 caracteres)
+            if (dto.Description.Length < 3 || dto.Description.Length > 100)
+                return BadRequest("La descripción debe tener entre 3 y 100 caracteres.");
+
+            // ? Validar que la descripción no contenga caracteres especiales no deseados
+            var regex = new Regex(@"^[a-zA-Z0-9\s.,\-()áéíóúÁÉÍÓÚñÑ]*$");
+            if (!regex.IsMatch(dto.Description))
+                return BadRequest("La descripción contiene caracteres no permitidos.");
+
+            // ? Validar que la fecha no sea futura
+            if (dto.Date > DateTime.Now)
+                return BadRequest("La fecha no puede ser en el futuro.");
+
+            var category = await _categoryService.GetByIdAsync(dto.CategoryId);
+            if (category == null)
+                return BadRequest($"La categoria con id {dto.CategoryId} no existe.");
+
             var income = new Models.Income
             {
                 Amount = dto.Amount,
@@ -202,6 +235,34 @@ namespace ExpensesTracker.api.Controllers
             var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
                 return Unauthorized();
+            // ? Validar que el monto sea mayor a cero
+            if (dto.Amount <= 0)
+                return BadRequest("El monto debe ser mayor a cero.");
+
+            // ? Validar que el monto no tenga más de 2 decimales
+            if (decimal.Round(dto.Amount, 2) != dto.Amount)
+                return BadRequest("El monto no puede tener más de 2 decimales.");
+
+            // ? Validar que la descripción no esté vacía ni sea solo espacios
+            if (string.IsNullOrWhiteSpace(dto.Description))
+                return BadRequest("La descripción no puede estar vacía ni contener solo espacios.");
+
+            // ? Validar longitud de la descripción (mínimo 3, máximo 100 caracteres)
+            if (dto.Description.Length < 3 || dto.Description.Length > 100)
+                return BadRequest("La descripción debe tener entre 3 y 100 caracteres.");
+
+            // ? Validar que la descripción no contenga caracteres especiales no deseados
+            var regex = new Regex(@"^[a-zA-Z0-9\s.,\-()áéíóúÁÉÍÓÚñÑ]*$");
+            if (!regex.IsMatch(dto.Description))
+                return BadRequest("La descripción contiene caracteres no permitidos.");
+
+            // ? Validar que la fecha no sea futura
+            if (dto.Date > DateTime.Now)
+                return BadRequest("La fecha no puede ser en el futuro.");
+
+            var category = await _categoryService.GetByIdAsync(dto.CategoryId);
+            if (category == null)
+                return BadRequest($"La categoria con id {dto.CategoryId} no existe.");
 
             var isAdmin = User.IsInRole("Admin");
 

@@ -3,7 +3,9 @@ using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Globalization;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 
 [ApiController]
 [Route("api/[controller]")]
@@ -51,15 +53,41 @@ public class CategoriesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateCategoryDto dto)
     {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
         var isAdmin = User.IsInRole("Admin");
         if (!isAdmin)
         {
             return StatusCode(403, "Solo un Admin puede crear categorías.");
         }
 
+        // 🔸 Normalizar el nombre: trim y pasar a minúsculas para validaciones
+        var nombreNormalizadoLower = dto.Name.Trim().ToLower();
+
+        // 🔸 Palabras reservadas no permitidas
+        var palabrasReservadas = new[] { "general", "default", "por defecto" };
+        if (palabrasReservadas.Contains(nombreNormalizadoLower))
+        {
+            return BadRequest("Ese nombre está reservado y no puede usarse.");
+        }
+
+        // 🔸 Validar si ya existe la categoría (case-insensitive)
+        var categoriasExistentes = await _categoryService.GetAllAsync();
+        var yaExiste = categoriasExistentes.Any(c =>
+            c.Name.Trim().ToLower() == nombreNormalizadoLower);
+
+        if (yaExiste)
+        {
+            return BadRequest("Ya existe una categoría con ese nombre.");
+        }
+
+        // 🔸 Capitalizar el nombre antes de guardar
+        var nombreCapitalizado = Capitalizar(dto.Name.Trim());
+
         var category = new Category
         {
-            Name = dto.Name
+            Name = nombreCapitalizado
         };
 
         var created = await _categoryService.CreateAsync(category);
@@ -72,6 +100,12 @@ public class CategoriesController : ControllerBase
 
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
+    private string Capitalizar(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return input;
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(input.ToLower());
+    }
+
 
     [Authorize]
     [HttpPut("{id}")]
@@ -87,10 +121,39 @@ public class CategoriesController : ControllerBase
         if (!isAdmin)
             return StatusCode(403, "Solo un Admin puede modificar categorías.");
 
+        // 🔎 Validaciones
+
+        var nombreNormalizadoLower = dto.Name.Trim().ToLower();
+
+        // ✔️ Palabras reservadas
+        var palabrasReservadas = new[] { "general", "default", "por defecto" };
+        if (palabrasReservadas.Contains(nombreNormalizadoLower))
+            return BadRequest("Ese nombre está reservado y no puede usarse.");
+
+        // ✔️ Longitud mínima/máxima
+        if (dto.Name.Trim().Length < 3 || dto.Name.Trim().Length > 50)
+            return BadRequest("El nombre debe tener entre 3 y 50 caracteres.");
+
+        // ✔️ Validar caracteres permitidos (solo letras, espacios y guiones)
+        if (!Regex.IsMatch(dto.Name.Trim(), @"^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s-]+$"))
+            return BadRequest("El nombre contiene caracteres inválidos.");
+
+        // ✔️ Verificar duplicado (ignorando el actual)
+        var categoriasExistentes = await _categoryService.GetAllAsync();
+        var yaExiste = categoriasExistentes.Any(c =>
+            c.Id != dto.Id &&
+            c.Name.Trim().ToLower() == nombreNormalizadoLower);
+
+        if (yaExiste)
+            return BadRequest("Ya existe otra categoría con ese nombre.");
+
+        // ✨ Capitalizar y normalizar antes de guardar
+        var nombreCapitalizado = Capitalizar(dto.Name.Trim());
+
         var category = new Category
         {
             Id = dto.Id,
-            Name = dto.Name
+            Name = nombreCapitalizado
         };
 
         var updated = await _categoryService.UpdateAsync(category);
@@ -98,6 +161,8 @@ public class CategoriesController : ControllerBase
 
         return NoContent();
     }
+
+
 
     [Authorize]
     [HttpDelete("{id}")]

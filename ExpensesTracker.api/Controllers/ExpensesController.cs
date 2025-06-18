@@ -3,17 +3,21 @@ using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
+using System.Text.RegularExpressions;
 
 [ApiController]
 [Route("api/[controller]")]
 public class ExpensesController : ControllerBase
 {
     private readonly IExpenseService _expenseService;
+    private readonly ICategoryService _categoryService;
 
-    public ExpensesController(IExpenseService expenseService)
+    public ExpensesController(IExpenseService expenseService, ICategoryService categoryService)
     {
         _expenseService = expenseService;
+        _categoryService = categoryService;
     }
 
     [Authorize]
@@ -95,9 +99,39 @@ public class ExpensesController : ControllerBase
     {
         if (!ModelState.IsValid) return BadRequest(ModelState);
 
+        // ✅ Validar que el monto sea mayor a cero
+        if (dto.Amount <= 0)
+            return BadRequest("El monto debe ser mayor a cero.");
+
+        // ✅ Validar que el monto no tenga más de 2 decimales
+        if (decimal.Round(dto.Amount, 2) != dto.Amount)
+            return BadRequest("El monto no puede tener más de 2 decimales.");
+
+        // ✅ Validar que la descripción no esté vacía ni sea solo espacios
+        if (string.IsNullOrWhiteSpace(dto.Description))
+            return BadRequest("La descripción no puede estar vacía ni contener solo espacios.");
+
+        // ✅ Validar longitud de la descripción (mínimo 3, máximo 100 caracteres)
+        if (dto.Description.Length < 3 || dto.Description.Length > 100)
+            return BadRequest("La descripción debe tener entre 3 y 100 caracteres.");
+
+        // ✅ Validar que la descripción no contenga caracteres especiales no deseados
+        var regex = new Regex(@"^[a-zA-Z0-9\s.,\-()áéíóúÁÉÍÓÚñÑ]*$");
+        if (!regex.IsMatch(dto.Description))
+            return BadRequest("La descripción contiene caracteres no permitidos.");
+
+        // ✅ Validar que la fecha no sea futura
+        if (dto.Date > DateTime.Now)
+            return BadRequest("La fecha no puede ser en el futuro.");
+
+
         var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
         if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
             return Unauthorized("Token inválido.");
+
+        var category = await _categoryService.GetByIdAsync(dto.CategoryId);
+        if (category == null)
+            return BadRequest($"La categoria con id {dto.CategoryId} no existe.");
 
         var expense = new Expense
         {
@@ -126,6 +160,7 @@ public class ExpensesController : ControllerBase
     }
 
 
+
     [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateExpenseDto dto)
@@ -136,9 +171,38 @@ public class ExpensesController : ControllerBase
         var originalExpense = await _expenseService.GetByIdAsync(id);
         if (originalExpense == null) return NotFound();
 
+        // ✅ Validar que el monto sea mayor a cero
+        if (dto.Amount <= 0)
+            return BadRequest("El monto debe ser mayor a cero.");
+
+        // ✅ Validar que el monto no tenga más de 2 decimales
+        if (decimal.Round(dto.Amount, 2) != dto.Amount)
+            return BadRequest("El monto no puede tener más de 2 decimales.");
+
+        // ✅ Validar que la descripción no esté vacía ni sea solo espacios
+        if (string.IsNullOrWhiteSpace(dto.Description))
+            return BadRequest("La descripción no puede estar vacía ni contener solo espacios.");
+
+        // ✅ Validar longitud de la descripción (mínimo 3, máximo 100 caracteres)
+        if (dto.Description.Length < 3 || dto.Description.Length > 100)
+            return BadRequest("La descripción debe tener entre 3 y 100 caracteres.");
+
+        // ✅ Validar que la descripción no contenga caracteres especiales no deseados
+        var regex = new Regex(@"^[a-zA-Z0-9\s.,\-()áéíóúÁÉÍÓÚñÑ]*$");
+        if (!regex.IsMatch(dto.Description))
+            return BadRequest("La descripción contiene caracteres no permitidos.");
+
+        // ✅ Validar que la fecha no sea futura
+        if (dto.Date > DateTime.Now)
+            return BadRequest("La fecha no puede ser en el futuro.");
+
         var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
         if (subClaim == null || !int.TryParse(subClaim.Value, out var userIdFromToken))
             return Unauthorized("Token inválido.");
+
+        var category = await _categoryService.GetByIdAsync(dto.CategoryId);
+        if (category == null)
+            return BadRequest($"La categoria con id {dto.CategoryId} no existe.");
 
         var isAdmin = User.IsInRole("Admin");
 

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace ExpensesTracker.api.Dtos.Income
 {
     public class IncomeDto
