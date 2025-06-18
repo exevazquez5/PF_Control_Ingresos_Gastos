@@ -13,48 +13,29 @@ function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
-    
-    try {
+    setLoading(true); // empezamos a cargar
+    setError(''); // limpiamos errores previos
+
+  try {
     const response = await axios.post("https://localhost:7008/api/Users/login", {
       username,
       password,
     });
 
-  //   const token = response.data.Token;
-  //   localStorage.setItem("token", token);
-  //   alert("Login exitoso");
-
-  //   setTimeout(() => {
-  //     setLoading(false);
-  //     // Aquí podrías redirigir si usás react-router, ej: navigate('/dashboard');
-  //   }, 1500);
-
-  // } catch (err) {
-  //   if (err.response && err.response.status === 401) {
-  //     setError("Usuario o contraseña incorrectos");
-  //   } else if (err.response && err.response.data) {
-  //     setError(err.response.data);
-  //   } else {
-  //     setError("Error de conexión");
-  //   }
-  //   setLoading(false);
-  // }}
-
-  // si el login fue exitoso
-      if (res.status === 200) {
-        // guardar token si lo necesitás
-        localStorage.setItem("token", res.data.token);
-
-        // redirigir al dashboard
-        navigate('/dashboard'); // redirección
-      }
-    } catch (error) {
-      console.error("Error al iniciar sesión:", error);
-    } finally {
-      setLoading(false);
+    if (response.status === 200) {
+      localStorage.setItem("token", response.data.token);
+      alert("Login exitoso");
     }
+  } catch (err) {
+    if (err.response && err.response.status === 401) {
+      console.log("Mensaje desde el backend:", err.response.data);
+      setError(err.response.data.message); // debe ser { message: "..." }
+    } else {
+      setError("Error de conexión");
+    }
+  } finally {
+    setLoading(false);
+  }
   };
 
   return (

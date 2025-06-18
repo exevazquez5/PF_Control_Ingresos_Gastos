@@ -117,7 +117,7 @@ public class UsersController : ControllerBase
     {
         var user = await _userService.GetByUsernameAsync(dto.Username);
         if (user == null || !PasswordHelper.VerifyPassword(dto.Password, user.PasswordHash, user.PasswordSalt))
-            return Unauthorized("Usuario o contraseña incorrectos");
+            return Unauthorized(new { message = "Usuario o contraseña incorrectos" });
 
         var token = _tokenService.GenerateToken(user);
 
