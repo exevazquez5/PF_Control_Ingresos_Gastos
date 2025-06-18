@@ -61,6 +61,13 @@ public class CategoryService : ICategoryService
         var category = await _context.Categories.FindAsync(id);
         if (category == null) return false;
 
+        // Verifica si hay ingresos o gastos asociados
+        bool usedInExpenses = await _context.Expenses.AnyAsync(e => e.CategoryId == id);
+        bool usedInIncomes = await _context.Incomes.AnyAsync(i => i.CategoryId == id);
+        
+        if (usedInExpenses || usedInIncomes)
+            return false; // Indicamos que no se puede eliminar
+
         _context.Categories.Remove(category);
         await _context.SaveChangesAsync();
 
