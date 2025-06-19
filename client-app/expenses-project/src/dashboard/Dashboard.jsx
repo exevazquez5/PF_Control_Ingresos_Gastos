@@ -415,6 +415,15 @@ const Dashboard = () => {
                 Barras
               </button>
             </div>
+            {/* Botón para abrir el Panel de Administración */}
+          {isAdmin && !showAdminPanel && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600 transition-all duration-200 shadow-lg"
+            >
+              Panel Admin
+            </button>
+          )}
           </div>
         </div>
 
@@ -510,21 +519,30 @@ const Dashboard = () => {
           )}
 
           {chartView === 'bar' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Comparación de Ingresos, Gastos y Balance</h3>
-              <div className="flex flex-col lg:flex-row items-center gap-8">
-                <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis tickFormatter={(value) => formatCurrency(value)} />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                      <Legend />
-                      <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+  <div className="bg-white rounded-xl shadow-lg p-6">
+    <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Comparación de Ingresos, Gastos y Balance</h3>
+    <div className="flex flex-col lg:flex-row items-center gap-8">
+      <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis tickFormatter={(value) => formatCurrency(value)} />
+            <Tooltip formatter={(value) => formatCurrency(value)} />
+            <Legend />
+            <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]}>
+              {barChartData.map((entry, index) => {
+                let color = '#6B7280'; // Color por defecto
+                if (entry.name === 'Ingresos') color = '#10B981';
+                else if (entry.name === 'Gastos') color = '#EF4444';
+                else if (entry.name === 'Balance') color = '#3B82F6';
+                
+                return <Cell key={`cell-${index}`} fill={color} />;
+              })}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
                 
                 <div className="flex flex-col gap-4 lg:w-80">
                   <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
@@ -553,16 +571,37 @@ const Dashboard = () => {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Transacciones Recientes</h2>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-          >
-            <Plus className="w-5 h-5" />
-            Nueva Transacción
-          </button>
-        </div>
+<div className="flex justify-between items-center mb-6">
+  <h2 className="text-2xl font-semibold text-gray-800">Transacciones Recientes</h2>
+  <div className="flex gap-3">
+    {/* Botón Gastos */}
+    <button
+      onClick={() => {/* Lógica para mostrar solo gastos */}}
+      className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+    >
+      <TrendingDown className="w-5 h-5" />
+      Gastos
+    </button>
+    
+    {/* Botón Ingresos */}
+    <button
+      onClick={() => {/* Lógica para mostrar solo ingresos */}}
+      className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+    >
+      <TrendingUp className="w-5 h-5" />
+      Ingresos
+    </button>
+    
+    {/* Botón Nueva Transacción */}
+    <button
+      onClick={() => setShowModal(true)}
+      className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+    >
+      <Plus className="w-5 h-5" />
+      Nueva Transacción
+    </button>
+  </div>
+</div>
 
         {/* Transactions Table */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -579,7 +618,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-              {transactions.map((transaction) => (
+              {transactions.slice(0, 10).map((transaction) => (
                 <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -666,19 +705,33 @@ const Dashboard = () => {
                       ))}
                     </select>
                   </div>
-
+                  {/*Monto maximo 10M */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Monto</label>
-                    <input
-                      type="number"
+                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monto (máximo $10,000,000)
+                  </label>
+                  <input
+                     type="number"
                       step="0.01"
+                      min="0"
+                      max="10000000"
                       value={formData.amount}
-                      onChange={(e) => setFormData({...formData, amount: e.target.value})}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="0.00"
-                      required
-                    />
-                  </div>
+                      onChange={(e) => {
+                      const value = parseFloat(e.target.value);
+                      if (value <= 10000000 || e.target.value === '') {
+                       setFormData({...formData, amount: e.target.value});
+                        }
+                          }}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                         placeholder="0.00"
+                         required
+                          />
+                          {formData.amount > 10000000 && (
+                          <p className="text-red-500 text-sm mt-1">
+                          El monto no puede exceder $10,000,000
+                        </p>
+                          )}
+                        </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
@@ -724,23 +777,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        <select
-          value={formData.categoryId}
-          onChange={(e) => {
-            const value = e.target.value;
-            setFormData({ ...formData, categoryId: value ? parseInt(value) : "" });
-          }}
-
-          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          required
-        >
-          <option value="">Seleccionar categoría</option>
-          {categories.map(cat => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
-          ))}
-        </select>
-
-        {/* Botón para abrir el Panel de Administración */}
+        {/* Botón para abrir el Panel de Administración 
           {isAdmin && !showAdminPanel && (
             <button
               onClick={() => setShowAdminPanel(true)}
@@ -748,7 +785,7 @@ const Dashboard = () => {
             >
               Panel Admin
             </button>
-          )}
+          )}*/}
 
           {/* Modal del Panel de Administración */}
           {isAdmin && showAdminPanel && (
@@ -788,6 +825,12 @@ const Dashboard = () => {
                               <span>{cat.name}</span>
                               <div className="flex gap-2">
                                 {/* Se puede extender con edición */}
+                                <button 
+                onClick={() => handleEditCategory(cat)} 
+                className="text-blue-600 hover:text-blue-800 px-3 py-1 rounded transition-colors"
+              >
+                Editar
+              </button>
                                 <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600">Eliminar</button>
                               </div>
                             </li>
@@ -858,9 +901,7 @@ const Dashboard = () => {
                               </p>
                             </div>
                           </div>
-                          <div className="mt-4 bg-gray-800 text-white p-3 rounded text-sm font-mono">
-                            <pre>{JSON.stringify(summaryData, null, 2)}</pre>
-                          </div>
+                      
                         </div>
                       )}
                     </div>
@@ -949,9 +990,7 @@ const Dashboard = () => {
                             </tbody>
                           </table>
                         </div>
-                        <div className="mt-4 bg-gray-800 text-white p-3 rounded text-xs font-mono overflow-x-auto">
-                          <pre>{JSON.stringify(filteredData, null, 2)}</pre>
-                        </div>
+                    
                       </div>
                     )}
                     </div>
