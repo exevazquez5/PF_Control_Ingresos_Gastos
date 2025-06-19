@@ -42,7 +42,7 @@ const Dashboard = () => {
   const [newCategoryName, setNewCategoryName] = useState("");
 
 
-const fetchCategories = async (token) => {
+  const fetchCategories = async (token) => {
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
       const response = await axios.get(`${BASE_URL}/api/Categories`, config);
@@ -81,6 +81,49 @@ const fetchCategories = async (token) => {
     }
   };
 
+  const handleSubmit = () => {
+    if (!formData.amount || !formData.date || !formData.categoryId) {
+      alert("Completa todos los campos obligatorios");
+      return;
+    }
+    createTransaction(formData);
+    resetForm();
+  };
+
+  const createTransaction = async (formData) => {
+    const token = localStorage.getItem("token");
+    if (!token || !userId) return;
+
+    setLoading(true);
+    try {
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+
+      const body = {
+        amount: parseFloat(formData.amount),
+        description: formData.description,
+        date: formData.date,
+        categoryId: Number(formData.categoryId)
+      };
+
+      const url = formData.type === "ingreso" ? `${BASE_URL}/api/Incomes` : `${BASE_URL}/api/Expenses`;
+      const type = formData.type;
+
+      console.log("Enviando transacción a:", url);
+      console.log("Datos:", body);
+
+      const response = await axios.post(url, body, config);
+      setTransactions(prev => [...prev, { ...response.data, type }]);
+    } catch (err) {
+      console.error("Error creando transacción:", err);
+      if (err.response?.data?.errors) {
+        console.error("Detalles del backend:", err.response.data.errors);
+      }
+      alert("Error creando transacción.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const fetchTransactions = async (token, userId, isAdmin) => {
     setLoading(true);
     try {
@@ -115,49 +158,6 @@ const fetchCategories = async (token) => {
         console.error("Data:", error.response.data);
       }
       alert("No se pudieron cargar las transacciones");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const createTransaction = async (formData) => {
-    const token = localStorage.getItem("token");
-    if (!token || !userId) return;
-
-    setLoading(true);
-    try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-
-      const body = {
-        dto: {
-          amount: parseFloat(formData.amount),
-          description: formData.description,
-          date: formData.date,
-          categoryId: parseInt(formData.categoryId), // 👈 asegurate que sea número
-          userId: parseInt(userId)
-        }
-      };
-
-      let url = "", type = "";
-      if (formData.type === "ingreso") {
-        url = `${BASE_URL}/api/Incomes`;
-        type = "ingreso";
-      } else {
-        url = `${BASE_URL}/api/Expenses`;
-        type = "gasto";
-      }
-
-      console.log("POST a:", url);
-      console.log("Payload:", body);
-
-      const response = await axios.post(url, body, config);
-      setTransactions(prev => [...prev, { ...response.data, type }]);
-    } catch (err) {
-      console.error("Error creando transacción:", err);
-      if (err.response?.data?.errors) {
-        console.error("Detalles:", err.response.data.errors);
-      }
-      alert("Error creando transacción");
     } finally {
       setLoading(false);
     }
@@ -243,22 +243,6 @@ const fetchCategories = async (token) => {
     });
     setEditingTransaction(null);
     setShowModal(false);
-  };
-
-  const handleSubmit = () => {
-    if (!formData.amount || !formData.date || !formData.categoryId) {
-      alert("Completa todos los campos obligatorios");
-      return;
-    }
-
-    // Simulamos que category es también categoryId (por mock anterior)
-    setFormData(prev => ({
-      ...prev,
-      categoryId: formData.category
-    }));
-
-    createTransaction({ ...formData, categoryId: formData.category });
-    resetForm();
   };
 
   const handleEdit = (transaction) => {
@@ -689,7 +673,11 @@ const fetchCategories = async (token) => {
 
         <select
           value={formData.categoryId}
-          onChange={(e) => setFormData({ ...formData, categoryId: parseInt(e.target.value) })}
+          onChange={(e) => {
+            const value = e.target.value;
+            setFormData({ ...formData, categoryId: value ? parseInt(value) : "" });
+          }}
+
           className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           required
         >
