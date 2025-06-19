@@ -25,6 +25,7 @@ const Dashboard = () => {
   const [userId, setUserId] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
+
   const [summaryData, setSummaryData] = useState(null);
   const [filterParams, setFilterParams] = useState({
     userId: '',
@@ -33,11 +34,13 @@ const Dashboard = () => {
     to: ''
   });
   const [filteredData, setFilteredData] = useState(null);
+
   const [chartView, setChartView] = useState('default');
   const [showModal, setShowModal] = useState(false);
   const [adminView, setAdminView] = useState('summary'); // o 'filter'
   const [summaryUserId, setSummaryUserId] = useState('');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  
   const [categories, setCategories] = useState([]);
   const [newCategoryName, setNewCategoryName] = useState("");
 
@@ -82,10 +85,16 @@ const Dashboard = () => {
   };
 
   const handleSubmit = () => {
-    if (!formData.amount || !formData.date || !formData.categoryId) {
+    if (
+      !formData.amount ||
+      !formData.date ||
+      !formData.categoryId ||
+      isNaN(Number(formData.categoryId))
+    ) {
       alert("Completa todos los campos obligatorios");
       return;
     }
+
     createTransaction(formData);
     resetForm();
   };
@@ -98,27 +107,68 @@ const Dashboard = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
+      const isEditing = !!editingTransaction;
+
       const body = {
         amount: parseFloat(formData.amount),
         description: formData.description,
-        date: formData.date,
-        categoryId: Number(formData.categoryId)
+        date: new Date(formData.date).toISOString(), // aseguramos formato completo
+        categoryId: Number(formData.categoryId),
+        userId: Number(userId),
+        ...(isEditing && { id: editingTransaction.id }) // incluir solo en PUT
       };
 
-      const url = formData.type === "ingreso" ? `${BASE_URL}/api/Incomes` : `${BASE_URL}/api/Expenses`;
-      const type = formData.type;
+      const base = formData.type === "ingreso" ? "Incomes" : "Expenses";
+      const url = isEditing
+        ? `${BASE_URL}/api/${base}/${editingTransaction.id}`
+        : `${BASE_URL}/api/${base}`;
 
-      console.log("Enviando transacción a:", url);
-      console.log("Datos:", body);
+      const method = isEditing ? axios.put : axios.post;
+      const response = await method(url, body, config);
 
-      const response = await axios.post(url, body, config);
-      setTransactions(prev => [...prev, { ...response.data, type }]);
+      // Si es PUT y no devuelve contenido, usar el cuerpo local
+      const responseData = response.data || body;
+
+      if (typeof responseData !== 'object') {
+        throw new Error("Respuesta inválida del servidor");
+      }
+
+      if (isEditing) {
+        setTransactions(prev =>
+          prev.map(t =>
+            t.id === editingTransaction.id
+              ? {
+                  ...t,
+                  ...formData,
+                  amount: parseFloat(formData.amount),
+                  date: formData.date,
+                  type: formData.type,
+                  category: categories.find(c => c.id === Number(formData.categoryId))?.name || "",
+                  categoryId: Number(formData.categoryId),
+                }
+              : t
+          )
+        );
+      } else {
+        setTransactions(prev => [
+          ...prev,
+          {
+            ...formData,
+            ...response.data,
+            amount: parseFloat(formData.amount),
+            type: formData.type,
+            date: formData.date,
+            category: categories.find(c => c.id === Number(formData.categoryId))?.name || "",
+            categoryId: Number(formData.categoryId),
+          }
+        ]);
+      }
     } catch (err) {
-      console.error("Error creando transacción:", err);
+      console.error("Error creando/actualizando transacción:", err);
       if (err.response?.data?.errors) {
         console.error("Detalles del backend:", err.response.data.errors);
       }
-      alert("Error creando transacción.");
+      alert("Error creando o actualizando transacción.");
     } finally {
       setLoading(false);
     }
@@ -258,7 +308,7 @@ const Dashboard = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (transaction) => {
     if (!window.confirm("¿Estás seguro de eliminar esta transacción?")) return;
 
     const token = localStorage.getItem("token");
@@ -266,9 +316,11 @@ const Dashboard = () => {
 
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      await axios.delete(`${BASE_URL}/api/${id}`, config); // Asegurate de tener un endpoint válido
+      const base = transaction.type === "ingreso" ? "Incomes" : "Expenses";
 
-      setTransactions(prev => prev.filter(t => t.id !== id));
+      await axios.delete(`${BASE_URL}/api/${base}/${transaction.id}`, config);
+
+      setTransactions(prev => prev.filter(t => t.id !== transaction.id));
     } catch (err) {
       console.error("Error eliminando transacción:", err);
       alert("Error al eliminar la transacción.");
@@ -527,8 +579,8 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {transactions.map((transaction) => (
-                  <tr key={transaction.id} className="hover:bg-gray-50 transition-colors">
+              {transactions.map((transaction) => (
+                <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         transaction.type === 'ingreso' 
@@ -562,11 +614,12 @@ const Dashboard = () => {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(transaction.id)}
+                          onClick={() => handleDelete(transaction)}
                           className="text-red-600 hover:text-red-900 transition-colors p-1 hover:bg-red-50 rounded"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+
                       </div>
                     </td>
                   </tr>
