@@ -17,7 +17,7 @@ function parseJwt(token) {
     return null;
   }
 }
-
+//
 const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
 
 const Dashboard = () => {
