@@ -1,7 +1,7 @@
 import { useState } from "react";
-import axios from "axios";
 import { Eye, EyeOff, User, Lock, Loader2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import axios from "axios";
 
 function Login() {
   const [username, setUsername] = useState('');
@@ -25,11 +25,13 @@ function Login() {
     if (response.status === 200) {
       localStorage.setItem("token", response.data.token);
       alert("Login exitoso");
+      navigate("/dashboard");
+      console.log("Token guardado: ", response.data.token)
     }
   } catch (err) {
     if (err.response && err.response.status === 401) {
       console.log("Mensaje desde el backend:", err.response.data);
-      setError(err.response.data.message); // debe ser { message: "..." }
+      setError(err.response.data.message);
     } else {
       setError("Error de conexión");
     }
