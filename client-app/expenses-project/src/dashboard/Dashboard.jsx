@@ -2,8 +2,10 @@ import React, { useState, useEffect } from "react";
 import axios from 'axios';
 import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3 } from 'lucide-react';
 import { PieChart as RechartsPieChart, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Pie } from 'recharts';
+import { useNavigate } from 'react-router-dom';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
+const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
 
 function parseJwt(token) {
   if (!token) return null;
@@ -18,9 +20,9 @@ function parseJwt(token) {
   }
 }
 
-const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
-
 const Dashboard = () => {
+  const navigate = useNavigate();
+
   const [isAdmin, setIsAdmin] = useState(false);
   const [userId, setUserId] = useState(null);
   const [transactions, setTransactions] = useState([]);
@@ -37,14 +39,16 @@ const Dashboard = () => {
 
   const [chartView, setChartView] = useState('default');
   const [showModal, setShowModal] = useState(false);
-  const [adminView, setAdminView] = useState('summary'); // o 'filter'
+  const [adminView, setAdminView] = useState('summary');
   const [summaryUserId, setSummaryUserId] = useState('');
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   
   const [categories, setCategories] = useState([]);
+  const [editingCategory, setEditingCategory] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState("");
 
 
+  // CATEGORIES
   const fetchCategories = async (token) => {
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
@@ -84,6 +88,27 @@ const Dashboard = () => {
     }
   };
 
+  const handleEditCategory = async (category) => {
+    const token = localStorage.getItem("token");
+    if (!token) return;
+
+    try {
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+
+      const body = {
+        id: category.id,
+        name: category.name  // el nuevo nombre
+      };
+
+      await axios.put(`${BASE_URL}/api/Categories/${category.id}`, body, config);
+      fetchCategories(token);
+    } catch (err) {
+      alert("Error al editar categoría");
+      console.error(err);
+    }
+  };
+
+  // SUBMIT
   const handleSubmit = () => {
     if (
       !formData.amount ||
@@ -174,12 +199,10 @@ const Dashboard = () => {
     }
   };
 
-  const fetchTransactions = async (token, userId, isAdmin) => {
+  const fetchTransactions = async (token, userId, isAdmin, categories) => {
     setLoading(true);
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      console.log("Token:", token);
-      console.log("BASE_URL:", BASE_URL);
 
       let incomesRes, expensesRes;
 
@@ -190,23 +213,23 @@ const Dashboard = () => {
         ]);
       } else {
         [incomesRes, expensesRes] = await Promise.all([
-          axios.get(`${BASE_URL}/api/Incomes/filter?userId=${userId}`, config),
-          axios.get(`${BASE_URL}/api/Expenses/filter?userId=${userId}`, config)
+          axios.get(`${BASE_URL}/api/Incomes`, config),
+          axios.get(`${BASE_URL}/api/Expenses`, config)
         ]);
       }
 
-      console.log("Incomes:", incomesRes.data);
-      console.log("Expenses:", expensesRes.data);
-
       const incomes = incomesRes.data.map(i => ({ ...i, type: "ingreso" }));
       const expenses = expensesRes.data.map(e => ({ ...e, type: "gasto" }));
-      setTransactions([...incomes, ...expenses]);
+
+      const withCategoryNames = [...incomes, ...expenses].map(t => ({
+        ...t,
+        category: categories.find(c => c.id === t.categoryId)?.name || 'Sin categoría'
+      }));
+
+      setTransactions(withCategoryNames);
+
     } catch (error) {
-      console.error("Error al cargar transacciones:", error.message);
-      if (error.response) {
-        console.error("Status:", error.response.status);
-        console.error("Data:", error.response.data);
-      }
+      console.error("Error al cargar transacciones:", error);
       alert("No se pudieron cargar las transacciones");
     } finally {
       setLoading(false);
@@ -329,10 +352,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     const token = localStorage.getItem("token");
-    if (!token) {
-      console.warn("No hay token guardado");
-      return;
-    }
+    if (!token) return;
+
     const payload = parseJwt(token);
     if (!payload) return;
 
@@ -340,11 +361,22 @@ const Dashboard = () => {
     const role = payload["http://schemas.microsoft.com/ws/2008/06/identity/claims/role"];
     const isAdmin = role === "Admin";
 
-    setIsAdmin(isAdmin);
     setUserId(userId);
+    setIsAdmin(isAdmin);
 
-    fetchTransactions(token, userId, isAdmin);
-    fetchCategories(token);
+    const init = async () => {
+      try {
+        const config = { headers: { Authorization: `Bearer ${token}` } };
+        const categoriesRes = await axios.get(`${BASE_URL}/api/Categories`, config);
+        setCategories(categoriesRes.data);
+
+        await fetchTransactions(token, userId, isAdmin, categoriesRes.data);
+      } catch (err) {
+        console.error("Error al inicializar dashboard", err);
+      }
+    };
+
+    init();
   }, []);
 
   const totalIncome = transactions
@@ -374,8 +406,8 @@ const Dashboard = () => {
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Control Personal de Finanzas</h1>
-            <p className="text-gray-600">Gestiona tus ingresos y gastos de manera inteligente</p>
+            <h1 className="text-4xl font-bold text-gray-800 mb-2">GastAr App</h1>
+            <p className="text-gray-600">Gestioná tu economia de manera inteligente</p>
           </div>
           
           <div className="flex items-center gap-4">
@@ -415,6 +447,29 @@ const Dashboard = () => {
                 Barras
               </button>
             </div>
+            {/* Botón de Cerrar Sesión - sin función */}
+<button 
+  onClick={() => {
+    // Limpiar datos de sesión
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Redirigir al login
+    window.location.replace('/login');
+  }}
+  className="bg-red-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-600 transition-all duration-200 shadow-lg"
+>
+  Cerrar Sesión
+</button>
+            {/* Botón para abrir el Panel de Administración */}
+          {isAdmin && !showAdminPanel && (
+            <button
+              onClick={() => setShowAdminPanel(true)}
+              className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600 transition-all duration-200 shadow-lg"
+            >
+              Panel Admin
+            </button>
+          )}
           </div>
         </div>
 
@@ -510,21 +565,30 @@ const Dashboard = () => {
           )}
 
           {chartView === 'bar' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Comparación de Ingresos, Gastos y Balance</h3>
-              <div className="flex flex-col lg:flex-row items-center gap-8">
-                <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="name" />
-                      <YAxis tickFormatter={(value) => formatCurrency(value)} />
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                      <Legend />
-                      <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
+  <div className="bg-white rounded-xl shadow-lg p-6">
+    <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Comparación de Ingresos, Gastos y Balance</h3>
+    <div className="flex flex-col lg:flex-row items-center gap-8">
+      <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
+        <ResponsiveContainer width="100%" height={400}>
+          <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="name" />
+            <YAxis tickFormatter={(value) => formatCurrency(value)} />
+            <Tooltip formatter={(value) => formatCurrency(value)} />
+            <Legend />
+            <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]}>
+              {barChartData.map((entry, index) => {
+                let color = '#6B7280'; // Color por defecto
+                if (entry.name === 'Ingresos') color = '#10B981';
+                else if (entry.name === 'Gastos') color = '#EF4444';
+                else if (entry.name === 'Balance') color = '#3B82F6';
+                
+                return <Cell key={`cell-${index}`} fill={color} />;
+              })}
+            </Bar>
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
                 
                 <div className="flex flex-col gap-4 lg:w-80">
                   <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
@@ -553,8 +617,28 @@ const Dashboard = () => {
         </div>
 
         {/* Actions */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800">Transacciones Recientes</h2>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-semibold text-gray-800">Transacciones Recientes</h2>
+        <div className="flex gap-3">
+          {/* Botón Gastos */}
+          <button
+            onClick={() => navigate('/expenses')}
+            className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+          >
+            <TrendingDown className="w-5 h-5" />
+            Gastos
+          </button>
+          
+          {/* Botón Ingresos */}
+          <button
+            onClick={() => navigate('/incomes')}
+            className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+          >
+            <TrendingUp className="w-5 h-5" />
+            Ingresos
+          </button>
+          
+          {/* Botón Nueva Transacción */}
           <button
             onClick={() => setShowModal(true)}
             className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
@@ -563,6 +647,7 @@ const Dashboard = () => {
             Nueva Transacción
           </button>
         </div>
+    </div>
 
         {/* Transactions Table */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
@@ -579,7 +664,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-              {transactions.map((transaction) => (
+              {transactions.slice(0, 10).map((transaction) => (
                 <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -666,19 +751,33 @@ const Dashboard = () => {
                       ))}
                     </select>
                   </div>
-
+                  {/*Monto maximo 10M */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Monto</label>
-                    <input
-                      type="number"
+                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Monto (máximo $10,000,000)
+                  </label>
+                  <input
+                     type="number"
                       step="0.01"
+                      min="0"
+                      max="10000000"
                       value={formData.amount}
-                      onChange={(e) => setFormData({...formData, amount: e.target.value})}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      placeholder="0.00"
-                      required
-                    />
-                  </div>
+                      onChange={(e) => {
+                      const value = parseFloat(e.target.value);
+                      if (value <= 10000000 || e.target.value === '') {
+                       setFormData({...formData, amount: e.target.value});
+                        }
+                          }}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                         placeholder="0.00"
+                         required
+                          />
+                          {formData.amount > 10000000 && (
+                          <p className="text-red-500 text-sm mt-1">
+                          El monto no puede exceder $10,000,000
+                        </p>
+                          )}
+                        </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
@@ -724,243 +823,251 @@ const Dashboard = () => {
           </div>
         )}
 
-        <select
-          value={formData.categoryId}
-          onChange={(e) => {
-            const value = e.target.value;
-            setFormData({ ...formData, categoryId: value ? parseInt(value) : "" });
-          }}
-
-          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          required
-        >
-          <option value="">Seleccionar categoría</option>
-          {categories.map(cat => (
-            <option key={cat.id} value={cat.id}>{cat.name}</option>
-          ))}
-        </select>
-
-        {/* Botón para abrir el Panel de Administración */}
-          {isAdmin && !showAdminPanel && (
-            <button
-              onClick={() => setShowAdminPanel(true)}
-              className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600 transition-all duration-200 shadow-lg"
-            >
-              Panel Admin
-            </button>
-          )}
-
-          {/* Modal del Panel de Administración */}
-          {isAdmin && showAdminPanel && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
-                <div className="p-6 border-b">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-2xl font-semibold text-gray-800">Panel de Administración</h3>
-                    <button onClick={() => setShowAdminPanel(false)} className="text-red-600 hover:text-red-800 text-lg font-bold px-3 py-1">
-                        ✕
-                      </button>
-                    </div>
-
-                    
-
-                  {/* navegación admin */}
-                  <div className="flex gap-4 mt-4 px-6">
-                    <button onClick={() => setAdminView('summary')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
-                      Resumen por Usuario
-                    </button>
-                    <button onClick={() => setAdminView('filter')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'filter' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
-                      Filtrar Ingresos
-                    </button>
-                    <button onClick={() => setAdminView('categories')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'categories' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
-                      Administrar Categorías
+        {/* Modal del Panel de Administración */}
+        {isAdmin && showAdminPanel && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+              <div className="p-6 border-b">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-2xl font-semibold text-gray-800">Panel de Administración</h3>
+                  <button onClick={() => setShowAdminPanel(false)} className="text-red-600 hover:text-red-800 text-lg font-bold px-3 py-1">
+                      ✕
                     </button>
                   </div>
+
+                  
+
+                {/* navegación admin */}
+                <div className="flex gap-4 mt-4 px-6">
+                  <button onClick={() => setAdminView('summary')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                    Resumen por Usuario
+                  </button>
+                  <button onClick={() => setAdminView('filter')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'filter' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                    Filtrar Ingresos
+                  </button>
+                  <button onClick={() => setAdminView('categories')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'categories' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                    Administrar Categorías
+                  </button>
                 </div>
+              </div>
 
-                  <div className="p-6 overflow-y-auto max-h-[70vh]">
-                    {adminView === 'categories' && (
-                      <div className="space-y-6">
-                        <h4 className="text-lg font-semibold text-gray-800">Categorías</h4>
-                        <ul className="space-y-2">
-                          {categories.map((cat) => (
-                            <li key={cat.id} className="flex justify-between items-center bg-gray-100 p-3 rounded">
-                              <span>{cat.name}</span>
-                              <div className="flex gap-2">
-                                {/* Se puede extender con edición */}
-                                <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600">Eliminar</button>
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
-
-                        <form onSubmit={handleCreateCategory} className="flex gap-4 items-center mt-4">
-                          <input
-                            type="text"
-                            value={newCategoryName}
-                            onChange={(e) => setNewCategoryName(e.target.value)}
-                            placeholder="Nueva categoría"
-                            className="flex-1 p-3 border rounded"
-                          />
-                          <button
-                            type="submit"
-                            disabled={!newCategoryName.trim()}
-                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
-                          >
-                            Crear
-                          </button>
-                        </form>
-                      </div>
-                    )}
-
-                {/* Contenido del Panel */}
-                  {adminView === 'summary' && (
+                <div className="p-6 overflow-y-auto max-h-[70vh]">
+                  {adminView === 'categories' && (
                     <div className="space-y-6">
-                      <h4 className="text-lg font-semibold text-gray-800">Resumen de Usuario</h4>
-                      <p className="text-sm text-gray-600">Endpoint: GET /api/Incomes/summary/:userId</p>
+                      <h4 className="text-lg font-semibold text-gray-800">Categorías</h4>
+                      <ul className="space-y-2">
+                        {categories.map((cat) => (
+                          <li key={cat.id} className="flex justify-between items-center bg-gray-100 p-3 rounded">
+                            {editingCategory?.id === cat.id ? (
+                              <input
+                                type="text"
+                                value={newCategoryName}
+                                onChange={(e) => setNewCategoryName(e.target.value)}
+                                className="border rounded p-2 mr-2 flex-1"
+                              />
+                            ) : (
+                              <span>{cat.name}</span>
+                            )}
 
-                      <div className="flex gap-4 items-end">
-                        <div className="flex-1">
-                          <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
-                          <input
-                            type="number"
-                            value={summaryUserId}
-                            onChange={(e) => setSummaryUserId(e.target.value)}
-                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                            placeholder="Ej: 7"
-                          />
-                        </div>
+                            <div className="flex gap-2">
+                              {editingCategory?.id === cat.id ? (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      handleEditCategory({ id: cat.id, name: newCategoryName });
+                                      setEditingCategory(null);
+                                    }}
+                                    className="text-green-600 hover:text-green-800 px-3 py-1 rounded"
+                                  >
+                                    Guardar
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingCategory(null)}
+                                    className="text-gray-600 hover:text-gray-800 px-3 py-1 rounded"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => {
+                                    setEditingCategory(cat);
+                                    setNewCategoryName(cat.name);
+                                  }}
+                                  className="text-blue-600 hover:text-blue-800 px-3 py-1 rounded"
+                                >
+                                  Editar
+                                </button>
+                              )}
+                              <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600">Eliminar</button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+
+
+                      <form onSubmit={handleCreateCategory} className="flex gap-4 items-center mt-4">
+                        <input
+                          type="text"
+                          value={newCategoryName}
+                          onChange={(e) => setNewCategoryName(e.target.value)}
+                          placeholder="Nueva categoría"
+                          className="flex-1 p-3 border rounded"
+                        />
                         <button
-                          onClick={() => fetchSummary(summaryUserId)}
-                          disabled={loading}
-                          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                          type="submit"
+                          disabled={!newCategoryName.trim()}
+                          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
                         >
-                          {loading ? 'Cargando...' : 'Obtener Resumen'}
+                          Crear
                         </button>
-                      </div>
-
-                      {summaryData && (
-                        <div className="bg-gray-50 rounded-lg p-4">
-                          <h5 className="font-semibold text-gray-800 mb-3">Resultados:</h5>
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="bg-white p-4 rounded-lg border-l-4 border-green-500">
-                              <p className="text-sm text-gray-600">Total Ingresos</p>
-                              <p className="text-xl font-bold text-green-600">{formatCurrency(summaryData.totalIncome)}</p>
-                            </div>
-                            <div className="bg-white p-4 rounded-lg border-l-4 border-red-500">
-                              <p className="text-sm text-gray-600">Total Gastos</p>
-                              <p className="text-xl font-bold text-red-600">{formatCurrency(summaryData.totalExpenses)}</p>
-                            </div>
-                            <div className="bg-white p-4 rounded-lg border-l-4 border-blue-500">
-                              <p className="text-sm text-gray-600">Balance</p>
-                              <p className={`text-xl font-bold ${summaryData.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                                {formatCurrency(summaryData.balance)}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="mt-4 bg-gray-800 text-white p-3 rounded text-sm font-mono">
-                            <pre>{JSON.stringify(summaryData, null, 2)}</pre>
-                          </div>
-                        </div>
-                      )}
+                      </form>
                     </div>
                   )}
 
-                  {adminView === 'filter' && (
-                    <div className="space-y-6">
-                      <h4 className="text-lg font-semibold text-gray-800">Filtrar Ingresos</h4>
-                    <p className="text-sm text-gray-600">Endpoint: GET /api/Incomes/filter?userId=&categoryId=&from=&to=</p>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">User ID *</label>
+              {/* Contenido del Panel */}
+                {adminView === 'summary' && (
+                  <div className="space-y-6">
+                    <h4 className="text-lg font-semibold text-gray-800">Resumen de Usuario</h4>
+                    <p className="text-sm text-gray-600">Endpoint: GET /api/Incomes/summary/:userId</p>
+
+                    <div className="flex gap-4 items-end">
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
                         <input
                           type="number"
-                          value={filterParams.userId}
-                          onChange={(e) => setFilterParams({...filterParams, userId: e.target.value})}
+                          value={summaryUserId}
+                          onChange={(e) => setSummaryUserId(e.target.value)}
                           className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                           placeholder="Ej: 7"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Category ID</label>
-                        <input
-                          type="number"
-                          value={filterParams.categoryId}
-                          onChange={(e) => setFilterParams({...filterParams, categoryId: e.target.value})}
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Ej: 4"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
-                        <input
-                          type="datetime-local"
-                          value={filterParams.from}
-                          onChange={(e) => setFilterParams({...filterParams, from: e.target.value})}
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
-                        <input
-                          type="datetime-local"
-                          value={filterParams.to}
-                          onChange={(e) => setFilterParams({...filterParams, to: e.target.value})}
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        />
-                      </div>
+                      <button
+                        onClick={() => fetchSummary(summaryUserId)}
+                        disabled={loading}
+                        className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                      >
+                        {loading ? 'Cargando...' : 'Obtener Resumen'}
+                      </button>
                     </div>
 
-                    <button
-                      onClick={fetchFilteredData}
-                      disabled={loading}
-                      className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                    >
-                      {loading ? 'Cargando...' : 'Aplicar Filtros'}
-                    </button>
-
-                    {filteredData && (
+                    {summaryData && (
                       <div className="bg-gray-50 rounded-lg p-4">
-                        <h5 className="font-semibold text-gray-800 mb-3">Resultados ({filteredData.length} registros):</h5>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="bg-gray-200">
-                              <tr>
-                                <th className="px-3 py-2 text-left">ID</th>
-                                <th className="px-3 py-2 text-left">Monto</th>
-                                <th className="px-3 py-2 text-left">Descripción</th>
-                                <th className="px-3 py-2 text-left">Fecha</th>
-                                <th className="px-3 py-2 text-left">Categoría</th>
-                                <th className="px-3 py-2 text-left">Usuario</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200">
-                              {filteredData.map((item) => (
-                                <tr key={item.id} className="hover:bg-gray-100">
-                                  <td className="px-3 py-2">{item.id}</td>
-                                  <td className="px-3 py-2 font-semibold text-green-600">{formatCurrency(item.amount)}</td>
-                                  <td className="px-3 py-2">{item.description}</td>
-                                  <td className="px-3 py-2">{new Date(item.date).toLocaleDateString('es-AR')}</td>
-                                  <td className="px-3 py-2">{item.categoryName}</td>
-                                  <td className="px-3 py-2">{item.username} (ID: {item.userId})</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
+                        <h5 className="font-semibold text-gray-800 mb-3">Resultados:</h5>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="bg-white p-4 rounded-lg border-l-4 border-green-500">
+                            <p className="text-sm text-gray-600">Total Ingresos</p>
+                            <p className="text-xl font-bold text-green-600">{formatCurrency(summaryData.totalIncome)}</p>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg border-l-4 border-red-500">
+                            <p className="text-sm text-gray-600">Total Gastos</p>
+                            <p className="text-xl font-bold text-red-600">{formatCurrency(summaryData.totalExpenses)}</p>
+                          </div>
+                          <div className="bg-white p-4 rounded-lg border-l-4 border-blue-500">
+                            <p className="text-sm text-gray-600">Balance</p>
+                            <p className={`text-xl font-bold ${summaryData.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                              {formatCurrency(summaryData.balance)}
+                            </p>
+                          </div>
                         </div>
-                        <div className="mt-4 bg-gray-800 text-white p-3 rounded text-xs font-mono overflow-x-auto">
-                          <pre>{JSON.stringify(filteredData, null, 2)}</pre>
-                        </div>
+                    
                       </div>
                     )}
+                  </div>
+                )}
+
+                {adminView === 'filter' && (
+                  <div className="space-y-6">
+                    <h4 className="text-lg font-semibold text-gray-800">Filtrar Ingresos</h4>
+                  <p className="text-sm text-gray-600">Endpoint: GET /api/Incomes/filter?userId=&categoryId=&from=&to=</p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">User ID *</label>
+                      <input
+                        type="number"
+                        value={filterParams.userId}
+                        onChange={(e) => setFilterParams({...filterParams, userId: e.target.value})}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Ej: 7"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Category ID</label>
+                      <input
+                        type="number"
+                        value={filterParams.categoryId}
+                        onChange={(e) => setFilterParams({...filterParams, categoryId: e.target.value})}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="Ej: 4"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
+                      <input
+                        type="datetime-local"
+                        value={filterParams.from}
+                        onChange={(e) => setFilterParams({...filterParams, from: e.target.value})}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
+                      <input
+                        type="datetime-local"
+                        value={filterParams.to}
+                        onChange={(e) => setFilterParams({...filterParams, to: e.target.value})}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={fetchFilteredData}
+                    disabled={loading}
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  >
+                    {loading ? 'Cargando...' : 'Aplicar Filtros'}
+                  </button>
+
+                  {filteredData && (
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h5 className="font-semibold text-gray-800 mb-3">Resultados ({filteredData.length} registros):</h5>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-200">
+                            <tr>
+                              <th className="px-3 py-2 text-left">ID</th>
+                              <th className="px-3 py-2 text-left">Monto</th>
+                              <th className="px-3 py-2 text-left">Descripción</th>
+                              <th className="px-3 py-2 text-left">Fecha</th>
+                              <th className="px-3 py-2 text-left">Categoría</th>
+                              <th className="px-3 py-2 text-left">Usuario</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {filteredData.map((item) => (
+                              <tr key={item.id} className="hover:bg-gray-100">
+                                <td className="px-3 py-2">{item.id}</td>
+                                <td className="px-3 py-2 font-semibold text-green-600">{formatCurrency(item.amount)}</td>
+                                <td className="px-3 py-2">{item.description}</td>
+                                <td className="px-3 py-2">{new Date(item.date).toLocaleDateString('es-AR')}</td>
+                                <td className="px-3 py-2">{item.categoryName}</td>
+                                <td className="px-3 py-2">{item.username} (ID: {item.userId})</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                  
                     </div>
                   )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
-          )}
-
+          </div>
+        )}
       </div>
     </div>
   );
