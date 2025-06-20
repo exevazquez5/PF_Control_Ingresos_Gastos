@@ -7,8 +7,12 @@ namespace ExpensesTracker.api.Interfaces
         Task<IEnumerable<User>> GetAllAsync();
         Task<User?> GetByIdAsync(int id);
         Task<User?> GetByUsernameAsync(string username);
+        Task<User?> GetByEmailAsync(string email);
         Task<User> CreateAsync(User user);
         Task<bool> UpdateAsync(User user);
         Task<bool> DeleteAsync(int id);
+        Task SavePasswordResetTokenAsync(string email, string token, DateTime expiration);
+        Task<PasswordResetToken?> GetResetTokenRecordAsync(string token);
+        Task DeleteResetTokenAsync(string token);
     }
 }

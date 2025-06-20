@@ -33,6 +33,11 @@ public class UserService : IUserService
         return await _context.Users.FirstOrDefaultAsync(u => u.Username == username);
     }
 
+    public async Task<User?> GetByEmailAsync(string email)
+    {
+        return await _context.Users.FirstOrDefaultAsync(u => u.Email == email);
+    }
+
     public async Task<User> CreateAsync(User user)
     {
         _context.Users.Add(user);
@@ -62,5 +67,42 @@ public class UserService : IUserService
         _context.Users.Remove(user);
         await _context.SaveChangesAsync();
         return true;
+    }
+
+    public async Task SavePasswordResetTokenAsync(string email, string token, DateTime expiration)
+    {
+        var existing = await _context.PasswordResetTokens
+            .FirstOrDefaultAsync(t => t.Email == email);
+
+        if (existing != null)
+            _context.PasswordResetTokens.Remove(existing); // solo 1 token por email
+
+        var resetToken = new PasswordResetToken
+        {
+            Email = email,
+            Token = token,
+            Expiration = expiration
+        };
+
+        _context.PasswordResetTokens.Add(resetToken);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<PasswordResetToken?> GetResetTokenRecordAsync(string token)
+    {
+        return await _context.PasswordResetTokens
+            .FirstOrDefaultAsync(t => t.Token == token);
+    }
+
+    public async Task DeleteResetTokenAsync(string token)
+    {
+        var record = await _context.PasswordResetTokens
+            .FirstOrDefaultAsync(t => t.Token == token);
+
+        if (record != null)
+        {
+            _context.PasswordResetTokens.Remove(record);
+            await _context.SaveChangesAsync();
+        }
     }
 }

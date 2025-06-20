@@ -14,11 +14,13 @@ public class UsersController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly ITokenService _tokenService;
+    private readonly IEmailService _emailService;
 
-    public UsersController(IUserService userService, ITokenService tokenService)
+    public UsersController(IUserService userService, ITokenService tokenService, IEmailService emailService)
     {
         _userService = userService;
         _tokenService = tokenService;
+        _emailService = emailService;
     }
 
     private bool IsAdmin() => User.IsInRole("Admin");
@@ -83,6 +85,7 @@ public class UsersController : ControllerBase
         var user = new User
         {
             Username = dto.Username,
+            Email = dto.Email,
             PasswordHash = passwordHash,
             PasswordSalt = passwordSalt,
             Role = "User" // Forzamos a que todos se registren como "User"
@@ -161,5 +164,47 @@ public class UsersController : ControllerBase
         if (!deleted) return NotFound();
 
         return NoContent();
+    }
+
+    [AllowAnonymous]
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword([FromBody] string email)
+    {
+        var user = await _userService.GetByEmailAsync(email);
+        if (user == null) return Ok(); // No revelar si el usuario existe
+
+        var token = Guid.NewGuid().ToString();
+        var expiration = DateTime.UtcNow.AddHours(1);
+
+        await _userService.SavePasswordResetTokenAsync(email, token, expiration);
+
+        var resetLink = $"https://localhost:7008/api/users/reset-password?token={token}";
+
+        await _emailService.SendAsync(email, "Reset your password", $"Haz click aquí para cambiar tu contraseña: {resetLink}");
+
+        return Ok();
+    }
+
+    [AllowAnonymous]
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    {
+        var record = await _userService.GetResetTokenRecordAsync(dto.Token);
+        if (record == null || record.Expiration < DateTime.UtcNow)
+            return BadRequest("Token inválido o expirado.");
+
+        var user = await _userService.GetByEmailAsync(record.Email);
+        if (user == null) return NotFound();
+
+        byte[] salt;
+        var hash = PasswordHelper.HashPassword(dto.NewPassword, out salt);
+
+        user.PasswordHash = hash;
+        user.PasswordSalt = salt;
+
+        await _userService.UpdateAsync(user);
+        await _userService.DeleteResetTokenAsync(dto.Token);
+
+        return Ok("Contraseña actualizada.");
     }
 }
