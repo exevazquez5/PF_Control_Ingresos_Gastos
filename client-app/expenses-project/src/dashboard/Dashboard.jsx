@@ -3,6 +3,9 @@ import axios from 'axios';
 import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3 } from 'lucide-react';
 import { PieChart as RechartsPieChart, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Pie } from 'recharts';
 import { useNavigate } from 'react-router-dom';
+import SuccessModal from './SucessModal';
+import ConfirmDeleteModal from './ConfirmDeleteModal';
+import ErrorModal from "./ErrorModal";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
@@ -23,12 +26,37 @@ function parseJwt(token) {
 const Dashboard = () => {
   const navigate = useNavigate();
 
+  // Estado general
   const [isAdmin, setIsAdmin] = useState(false);
   const [userId, setUserId] = useState(null);
-  const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  // Estado de transacciones
+  const [transactions, setTransactions] = useState([]);
+  const [formData, setFormData] = useState({
+    type: 'ingreso',
+    category: '',
+    amount: '',
+    date: '',
+    description: '',
+    categoryId: ''
+    });
+  const [editingTransaction, setEditingTransaction] = useState(null);
+  const [formError, setFormError] = useState('');
+  const [chartView, setChartView] = useState('default');
+
+  // Estado de modales
+  const [showModal, setShowModal] = useState(false);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [showError, setShowError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [confirmDelete, setConfirmDelete] = useState({ show: false, transaction: null });
+
+  // Panel admin
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [adminView, setAdminView] = useState('summary');
   const [summaryData, setSummaryData] = useState(null);
+  const [summaryUserId, setSummaryUserId] = useState('');
   const [filterParams, setFilterParams] = useState({
     userId: '',
     categoryId: '',
@@ -36,19 +64,34 @@ const Dashboard = () => {
     to: ''
   });
   const [filteredData, setFilteredData] = useState(null);
+  const [notFoundMessage, setNotFoundMessage] = useState("");
 
-  const [chartView, setChartView] = useState('default');
-  const [showModal, setShowModal] = useState(false);
-  const [adminView, setAdminView] = useState('summary');
-  const [summaryUserId, setSummaryUserId] = useState('');
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
-  
+  // Categorías
   const [categories, setCategories] = useState([]);
   const [editingCategory, setEditingCategory] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState("");
 
+  const totalIncome = transactions
+  .filter((t) => t.type === "ingreso")
+  .reduce((sum, t) => sum + t.amount, 0);
 
-  // CATEGORIES
+  const totalExpenses = transactions
+  .filter((t) => t.type === "gasto")
+  .reduce((sum, t) => sum + t.amount, 0);
+
+  const balance = totalIncome - totalExpenses;
+
+  const chartData = [
+  { name: "Ingresos", value: totalIncome },
+  { name: "Gastos", value: totalExpenses }
+  ];
+
+  const barChartData = [
+  { name: "Ingresos", amount: totalIncome },
+  { name: "Gastos", amount: totalExpenses },
+  { name: "Balance", amount: balance }
+  ];
+
   const fetchCategories = async (token) => {
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
@@ -108,20 +151,16 @@ const Dashboard = () => {
     }
   };
 
-  // SUBMIT
   const handleSubmit = () => {
-    if (
-      !formData.amount ||
-      !formData.date ||
-      !formData.categoryId ||
-      isNaN(Number(formData.categoryId))
-    ) {
-      alert("Completa todos los campos obligatorios");
+    if (!formData.amount || !formData.date || !formData.categoryId || isNaN(Number(formData.categoryId))) {
+      setFormError("Completa todos los campos obligatorios");
       return;
     }
 
     createTransaction(formData);
     resetForm();
+
+    setFormError('');
   };
 
   const createTransaction = async (formData) => {
@@ -188,12 +227,18 @@ const Dashboard = () => {
           }
         ]);
       }
+
+      setShowSuccess(true);
     } catch (err) {
       console.error("Error creando/actualizando transacción:", err);
-      if (err.response?.data?.errors) {
-        console.error("Detalles del backend:", err.response.data.errors);
-      }
-      alert("Error creando o actualizando transacción.");
+
+      const msg =
+        err.response?.data?.title ||
+        err.response?.data ||  
+        "Error creando o actualizando transacción.";
+
+      setErrorMessage(msg);
+      setShowError(true);
     } finally {
       setLoading(false);
     }
@@ -244,25 +289,40 @@ const Dashboard = () => {
   };
 
   const fetchSummary = async (summaryUserId) => {
-  const token = localStorage.getItem("token");
-  if (!token) return;
+    const token = localStorage.getItem("token");
+    if (!token) return;
 
-  if (!summaryUserId) {
-    alert("Por favor ingresa un User ID");
-    return;
-  }
+    if (!summaryUserId) {
+      setErrorMessage("Por favor ingresa un User ID");
+      setShowError(true);
+      return;
+    }
 
-  setLoading(true);
-  try {
-    const config = { headers: { Authorization: `Bearer ${token}` } };
-    const response = await axios.get(`${BASE_URL}/api/Incomes/summary/${summaryUserId}`, config);
-    setSummaryData(response.data);
-  } catch (error) {
-    console.error("Error al obtener el resumen:", error);
-    alert("No se pudo obtener el resumen del usuario.");
-  } finally {
-    setLoading(false);
-  }
+    setLoading(true);
+    try {
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const response = await axios.get(`${BASE_URL}/api/Incomes/summary/${summaryUserId}`, config);
+
+      if (response.data.totalIncome === 0 && response.data.totalExpenses === 0) {
+        setNotFoundMessage(`No se encontraron datos para el usuario ${summaryUserId}`);
+      } else {
+        setNotFoundMessage("");
+      }
+
+      setSummaryData(response.data);
+    } catch (error) {
+      console.error("Error al obtener el resumen:", error);
+
+      const msg =
+        error.response?.data?.title ||  // Si usás ProblemDetails
+        error.response?.data ||        // Si es texto plano
+        "No se pudo obtener el resumen del usuario.";
+
+      setErrorMessage(msg);
+      setShowError(true);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchFilteredData = async () => {
@@ -270,10 +330,6 @@ const Dashboard = () => {
     if (!token) return;
 
     const { userId, categoryId, from, to } = filterParams;
-    if (!userId) {
-      alert("Por favor ingresa un User ID");
-      return;
-    }
 
     setLoading(true);
     try {
@@ -286,6 +342,13 @@ const Dashboard = () => {
       });
 
       const response = await axios.get(`${BASE_URL}/api/Incomes/filter?${query}`, config);
+
+      if (response.data.length === 0) {
+      setNotFoundMessage(`No se encontraron datos para el usuario ${userId}`);
+      } else {
+        setNotFoundMessage(""); // limpiar si hay datos
+      }
+
       setFilteredData(response.data);
     } catch (error) {
       console.error("Error al obtener datos filtrados:", error);
@@ -294,16 +357,6 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
-
-  const [formData, setFormData] = useState({
-  type: 'ingreso',
-  category: '',
-  amount: '',
-  date: '',
-  description: '',
-  categoryId: ''
-  });
-  const [editingTransaction, setEditingTransaction] = useState(null);
 
   const resetForm = () => {
     setFormData({
@@ -331,23 +384,11 @@ const Dashboard = () => {
     setShowModal(true);
   };
 
-  const handleDelete = async (transaction) => {
-    if (!window.confirm("¿Estás seguro de eliminar esta transacción?")) return;
-
-    const token = localStorage.getItem("token");
-    if (!token) return;
-
-    try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const base = transaction.type === "ingreso" ? "Incomes" : "Expenses";
-
-      await axios.delete(`${BASE_URL}/api/${base}/${transaction.id}`, config);
-
-      setTransactions(prev => prev.filter(t => t.id !== transaction.id));
-    } catch (err) {
-      console.error("Error eliminando transacción:", err);
-      alert("Error al eliminar la transacción.");
-    }
+  const handleDelete = (transaction) => {
+    setConfirmDelete({
+      show: true,
+      transaction: transaction
+    });
   };
 
   useEffect(() => {
@@ -378,27 +419,6 @@ const Dashboard = () => {
 
     init();
   }, []);
-
-  const totalIncome = transactions
-  .filter((t) => t.type === "ingreso")
-  .reduce((sum, t) => sum + t.amount, 0);
-
-  const totalExpenses = transactions
-  .filter((t) => t.type === "gasto")
-  .reduce((sum, t) => sum + t.amount, 0);
-
-  const balance = totalIncome - totalExpenses;
-
-  const chartData = [
-  { name: "Ingresos", value: totalIncome },
-  { name: "Gastos", value: totalExpenses }
-  ];
-
-  const barChartData = [
-  { name: "Ingresos", amount: totalIncome },
-  { name: "Gastos", amount: totalExpenses },
-  { name: "Balance", amount: balance }
-  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -472,7 +492,6 @@ const Dashboard = () => {
           )}
           </div>
         </div>
-
         {/* Summary Cards / Charts */}
         <div className="mb-8">
           {chartView === 'default' && (
@@ -529,7 +548,26 @@ const Dashboard = () => {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ name, value, percent }) => `${name}: ${formatCurrency(value)} (${(percent * 100).toFixed(1)}%)`}
+                        label={({ name, value, percent, x, y }) => (
+                          <text
+                            x={x}
+                            y={y}
+                            fill="#ffffff"
+                            fontSize={14}
+                            textAnchor="middle"
+                            dominantBaseline="central"
+                            style={{
+                              textShadow: `
+                                -1px -1px 2px #000, 
+                                1px -1px 2px #000, 
+                                -1px  1px 2px #000, 
+                                1px  1px 2px #000`
+                            }}
+                          >
+                            {`${name}: ${formatCurrency(value)} (${(percent * 100).toFixed(1)}%)`}
+                          </text>
+                        )}
+
                         outerRadius={120}
                         fill="#8884d8"
                         dataKey="value"
@@ -615,7 +653,6 @@ const Dashboard = () => {
             </div>
           )}
         </div>
-
         {/* Actions */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800">Transacciones Recientes</h2>
@@ -648,7 +685,6 @@ const Dashboard = () => {
           </button>
         </div>
     </div>
-
         {/* Transactions Table */}
         <div className="bg-white rounded-xl shadow-lg overflow-hidden">
           <div className="overflow-x-auto">
@@ -713,7 +749,6 @@ const Dashboard = () => {
             </table>
           </div>
         </div>
-
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -801,6 +836,12 @@ const Dashboard = () => {
                     />
                   </div>
 
+                  {formError && (
+                    <div className="text-red-600 text-sm font-medium text-center mb-2">
+                      {formError}
+                    </div>
+                  )}
+
                   <div className="flex gap-3 pt-4">
                     <button
                       type="button"
@@ -821,8 +862,8 @@ const Dashboard = () => {
               </div>
             </div>
           </div>
+          
         )}
-
         {/* Modal del Panel de Administración */}
         {isAdmin && showAdminPanel && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -835,20 +876,45 @@ const Dashboard = () => {
                     </button>
                   </div>
 
-                  
-
                 {/* navegación admin */}
                 <div className="flex gap-4 mt-4 px-6">
-                  <button onClick={() => setAdminView('summary')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+                  <button
+                    onClick={() => {
+                      setAdminView('summary');
+                      setNotFoundMessage("");
+                    }}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
                     Resumen por Usuario
                   </button>
-                  <button onClick={() => setAdminView('filter')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'filter' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+
+                  <button
+                    onClick={() => {
+                      setAdminView('filter');
+                      setNotFoundMessage("");
+                    }}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      adminView === 'filter' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
                     Filtrar Ingresos
                   </button>
-                  <button onClick={() => setAdminView('categories')} className={`px-4 py-2 rounded-lg font-medium transition-colors ${adminView === 'categories' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
+
+                  <button
+                    onClick={() => {
+                      setAdminView('categories');
+                      setNotFoundMessage("");
+                    }}
+                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                      adminView === 'categories' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                  >
                     Administrar Categorías
                   </button>
                 </div>
+
               </div>
 
                 <div className="p-6 overflow-y-auto max-h-[70vh]">
@@ -929,8 +995,6 @@ const Dashboard = () => {
                 {adminView === 'summary' && (
                   <div className="space-y-6">
                     <h4 className="text-lg font-semibold text-gray-800">Resumen de Usuario</h4>
-                    <p className="text-sm text-gray-600">Endpoint: GET /api/Incomes/summary/:userId</p>
-
                     <div className="flex gap-4 items-end">
                       <div className="flex-1">
                         <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
@@ -950,6 +1014,13 @@ const Dashboard = () => {
                         {loading ? 'Cargando...' : 'Obtener Resumen'}
                       </button>
                     </div>
+
+                    {notFoundMessage && (
+                      <p className="text-red-600 text-sm font-medium mt-2 ml-1">
+                        {notFoundMessage}
+                      </p>
+                    )}
+
 
                     {summaryData && (
                       <div className="bg-gray-50 rounded-lg p-4">
@@ -979,8 +1050,6 @@ const Dashboard = () => {
                 {adminView === 'filter' && (
                   <div className="space-y-6">
                     <h4 className="text-lg font-semibold text-gray-800">Filtrar Ingresos</h4>
-                  <p className="text-sm text-gray-600">Endpoint: GET /api/Incomes/filter?userId=&categoryId=&from=&to=</p>
-                  
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">User ID *</label>
@@ -1020,6 +1089,11 @@ const Dashboard = () => {
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       />
                     </div>
+
+                    {notFoundMessage && adminView === 'filter' && (
+                      <p className="text-red-600 text-sm font-medium mt-2 ml-4">{notFoundMessage}</p>
+                    )}
+
                   </div>
 
                   <button
@@ -1069,6 +1143,41 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+        {/* Modal de SucessModal */}
+        {showSuccess && (
+          <SuccessModal message="Cambios guardados correctamente." onClose={() => setShowSuccess(false)} />
+        )}
+        {/* Modal de ConfirmDeleteModal */}
+        {confirmDelete.show && (
+          <ConfirmDeleteModal
+            message={`¿Estás seguro de eliminar esta transacción de ${formatCurrency(confirmDelete.transaction.amount)}?`}
+            onCancel={() => setConfirmDelete({ show: false, transaction: null })}
+            onConfirm={async () => {
+              const token = localStorage.getItem("token");
+              const transaction = confirmDelete.transaction;
+              if (!token || !transaction) return;
+
+              try {
+                const config = { headers: { Authorization: `Bearer ${token}` } };
+                const base = transaction.type === "ingreso" ? "Incomes" : "Expenses";
+
+                await axios.delete(`${BASE_URL}/api/${base}/${transaction.id}`, config);
+
+                setTransactions(prev => prev.filter(t => t.id !== transaction.id));
+                setShowSuccess(true);
+              } catch (err) {
+                console.error("Error eliminando transacción:", err);
+                setShowError(true);
+              } finally {
+                setConfirmDelete({ show: false, transaction: null });
+              }
+            }}
+          />
+        )}
+        {/* Modal de ErrorModal */}
+        {showError && (
+          <ErrorModal message={errorMessage} onClose={() => setShowError(false)} />
+        )}
     </div>
   );
 };
