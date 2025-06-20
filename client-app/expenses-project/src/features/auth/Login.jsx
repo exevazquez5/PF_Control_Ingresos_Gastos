@@ -25,7 +25,7 @@ function Login() {
     if (response.status === 200) {
       localStorage.setItem("token", response.data.token);
       alert("Login exitoso");
-      navigate("/dashboard");
+      window.location.replace("/dashboard");
       console.log("Token guardado: ", response.data.token)
     }
   } catch (err) {
