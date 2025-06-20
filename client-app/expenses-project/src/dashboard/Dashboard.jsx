@@ -447,6 +447,20 @@ const Dashboard = () => {
                 Barras
               </button>
             </div>
+            {/* Botón de Cerrar Sesión - sin función */}
+<button 
+  onClick={() => {
+    // Limpiar datos de sesión
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Redirigir al login
+    window.location.replace('/login');
+  }}
+  className="bg-red-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-600 transition-all duration-200 shadow-lg"
+>
+  Cerrar Sesión
+</button>
             {/* Botón para abrir el Panel de Administración */}
           {isAdmin && !showAdminPanel && (
             <button
