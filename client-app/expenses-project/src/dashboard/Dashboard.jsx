@@ -473,7 +473,13 @@ const Dashboard = () => {
   }, []);
 
   return (
-    <div className="min-h-screen dark:bg-gray-700 bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    //<div className="min-h-screen dark:bg-gray-700 bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="
+      min-h-screen 
+      bg-gradient-to-br from-blue-50 to-indigo-100 
+      dark:bg-gradient-to-br dark:from-gray-900 dark:to-black
+      p-4
+   ">
       <div className="max-w-7xl mx-auto dark:bg-gray-700">
 
         {/* Header */}

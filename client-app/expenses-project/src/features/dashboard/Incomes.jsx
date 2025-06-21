@@ -148,12 +148,18 @@ export default function IncomesDashboard() {
   const totalIncome = modalList.reduce((sum, t) => sum + t.amount, 0);
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    //<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="
+      min-h-screen 
+      bg-gradient-to-br from-blue-50 to-indigo-100 
+      dark:bg-gradient-to-br dark:from-gray-900 dark:to-black
+      p-4
+   ">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">Dashboard de Ingresos</h1>
-            <p className="text-gray-600">Visualizá tus ingresos por categoría</p>
+            <h1 className="text-2xl font-bold text-gray-800 mb-2 dark:text-white">Detalle de Ingresos</h1>
+            {/* <p className="text-gray-600">Visualizá tus ingresos por categoría</p> */}
           </div>
           <button
             onClick={() => navigate('/dashboard')}

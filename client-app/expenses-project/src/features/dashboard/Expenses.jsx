@@ -130,14 +130,20 @@ export default function ExpensesDashboard() {
   const totalExpenses = modalList.reduce((sum, t) => sum + t.amount, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    //<div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="
+      min-h-screen 
+      bg-gradient-to-br from-blue-50 to-indigo-100 
+      dark:bg-gradient-to-br dark:from-gray-900 dark:to-black
+      p-4
+   ">
       <div className="max-w-7xl mx-auto space-y-8">
 
         {/* header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-4xl font-bold text-gray-800">Dashboard de Gastos</h1>
-            <p className="text-gray-600">Visualizá tus gastos por categoría</p>
+            <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Detalle de Gastos</h1>
+            {/* <p className="text-gray-600">Visualizá tus gastos por categoría</p> */}
           </div>
           <button
             onClick={() => navigate('/dashboard')}
