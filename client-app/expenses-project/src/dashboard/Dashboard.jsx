@@ -110,7 +110,6 @@ const Dashboard = () => {
       setCategories(response.data);
     } catch (error) {
       console.error("Error al obtener categorías:", error);
-      alert("No se pudieron cargar las categorías.");
     }
   };
 
@@ -124,9 +123,34 @@ const Dashboard = () => {
       setNewCategoryName("");
       fetchCategories(token);
     } catch (err) {
-      alert("Error al crear categoría");
-      console.error(err);
+  console.error("Error al crear categoría:", err);
+
+  let message = "Error al crear categoría";
+
+  // Si el backend devuelve un string plano como error
+  if (typeof err.response?.data === "string") {
+    message = err.response.data;
+  }
+
+  // Si devuelve un objeto con mensaje
+  else if (typeof err.response?.data?.message === "string") {
+    message = err.response.data.message;
+  }
+
+  // Si devuelve un objeto con errores de validación
+  else if (err.response?.data?.errors) {
+    const errors = err.response.data.errors;
+    // Tomamos el primer mensaje del primer campo que tenga errores
+    const firstKey = Object.keys(errors)[0];
+    if (Array.isArray(errors[firstKey])) {
+      message = errors[firstKey][0]; // Mostramos solo el primer mensaje
     }
+  }
+
+  setErrorMessage(message);
+  setShowError(true);
+}
+
   };
 
   const handleDeleteCategory = async (id) => {
@@ -137,9 +161,25 @@ const Dashboard = () => {
       await axios.delete(`${BASE_URL}/api/Categories/${id}`, config);
       fetchCategories(token);
     } catch (err) {
-      alert("Error al eliminar categoría");
-      console.error(err);
+    console.error("Error al eliminar categoría:", err);
+
+    let message = "Error al eliminar categoría";
+
+    if (typeof err.response?.data === "string") {
+      message = err.response.data;
+    } else if (typeof err.response?.data?.message === "string") {
+      message = err.response.data.message;
+    } else if (err.response?.data?.errors) {
+      const errors = err.response.data.errors;
+      const firstKey = Object.keys(errors)[0];
+      if (Array.isArray(errors[firstKey])) {
+        message = errors[firstKey][0];
+      }
     }
+
+    setErrorMessage(message);
+    setShowError(true);
+  }
   };
 
   const handleEditCategory = async (category) => {
@@ -157,9 +197,27 @@ const Dashboard = () => {
       await axios.put(`${BASE_URL}/api/Categories/${category.id}`, body, config);
       fetchCategories(token);
     } catch (err) {
-      alert("Error al editar categoría");
-      console.error(err);
-    }
+  console.error("Error al editar categoría:", err);
+
+  let message = "Error al editar categoría";
+
+  // Si el backend devuelve un string plano como error
+  if (typeof err.response?.data === "string") {
+    message = err.response.data;
+  }
+  // Si devuelve un objeto con un campo 'message'
+  else if (typeof err.response?.data?.message === "string") {
+    message = err.response.data.message;
+  }
+  // Si devuelve un objeto directamente
+  else if (err.response?.data && typeof err.response.data === "object") {
+    message = JSON.stringify(err.response.data); // Como último recurso
+  }
+
+  setErrorMessage(message);
+  setShowError(true);
+}
+
   };
 
   const handleSubmit = () => {
@@ -270,7 +328,6 @@ const Dashboard = () => {
 
     } catch (error) {
       console.error("Error al cargar transacciones:", error);
-      alert("No se pudieron cargar las transacciones");
     } finally {
       setLoading(false);
     }
@@ -612,7 +669,15 @@ const Dashboard = () => {
                   <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="name" />
-                    <YAxis tickFormatter={(value) => formatCurrency(value)} />
+                    <YAxis
+  width={70}
+  tickFormatter={(value) => {
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
+    return `$${value}`;
+  }}
+/>
+
                     <Tooltip formatter={(value) => formatCurrency(value)} />
                     <Legend />
                     <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]}>
@@ -705,7 +770,7 @@ const Dashboard = () => {
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
-              {transactions.slice(0, 10).map((transaction) => (
+              {transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10).map((transaction) => (
                 <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from 'axios';
-import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { parseJwt } from "../../utils/jwt";
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -8,15 +8,43 @@ import { X, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-const CREAM_PALETTE = [
-  '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b',
-  '#eab308', '#fff7ed', '#fef9c3', '#fde047', '#facc15',
-  '#eab308', '#ffedd5', '#fed7aa', '#fdba74', '#fb923c',
-  '#f97316', '#ea580c', '#e2e8f0', '#f1f5f9', '#e0f2fe'
+// Paleta de colores más contrastante y distintiva
+const IMPROVED_PALETTE = [
+  '#FF6B6B', // Rojo coral
+  '#4ECDC4', // Turquesa
+  '#45B7D1', // Azul cielo
+  '#96CEB4', // Verde menta
+  '#FFEAA7', // Amarillo suave
+  '#DDA0DD', // Violeta suave
+  '#FFB347', // Naranja durazno
+  '#98D8C8', // Verde agua
+  '#F7DC6F', // Amarillo dorado
+  '#BB8FCE', // Púrpura suave
+  '#85C1E9', // Azul claro
+  '#F8C471', // Naranja claro
+  '#82E0AA', // Verde claro
+  '#F1948A', // Rosa salmón
+  '#AED6F1', // Azul pastel
+  '#D7BDE2', // Lavanda
+  '#A9DFBF', // Verde pastel
+  '#F9E79F', // Amarillo pastel
+  '#FAD7A0', // Beige
+  '#D5A6BD'  // Rosa grisáceo
 ];
-function getRandomCreamColor() {
-  return CREAM_PALETTE[Math.floor(Math.random() * CREAM_PALETTE.length)];
+
+// Función para obtener colores únicos y secuenciales
+function getDistinctColor(index) {
+  return IMPROVED_PALETTE[index % IMPROVED_PALETTE.length];
 }
+
+function generateRandomColor() {
+  let color;
+  do {
+    color = '#' + Math.floor(Math.random()*16777215).toString(16);
+  } while (/^(#?(?:[0]{6}|[fF]{6}|[cC]{6}|[eE]{6}|[dD]{6}|[aA]{6}))$/.test(color));
+  return color;
+}
+
 export default function IncomesDashboard() {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
@@ -82,9 +110,12 @@ export default function IncomesDashboard() {
     const sum = transactions
     .filter(t => t.categoryId === cat.id)
     .reduce((a,b) => a + b.amount, 0);
-    return { name: cat.name, value: sum, color: getRandomCreamColor() };
-  })
-  .filter(d => d.value > 0);
+    return  {
+      name: cat.name,
+      value: categorySum,
+      color: getDistinctColor(index) // Color único basado en el índice
+    };
+  }).filter(d => d.value > 0);
 
   const totalIncomes = chartData
   .reduce((a,b) => a + b.value, 0);
@@ -137,14 +168,17 @@ export default function IncomesDashboard() {
             <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-6 text-center">
               Ingresos por Categoría
             </h3>
-            <div className="flex flex-col lg:flex-row items-center gap-8">
-                            <div className="flex flex-col gap-4 lg:w-80">
-                <div className="bg-green-50 dark:bg-gray-700 p-4 rounded-lg border-l-4 border-green-500">
+            <div className="flex flex-col lg:flex-row items-start gap-8">
+                           {/* Total de ingresos */}
+              <div className="lg:w-64">
+                <div className="bg-green-50 dark:bg-gray-700 p-6 rounded-lg border-l-4 border-green-500">
                   <p className="text-gray-600 dark:text-white text-sm font-medium">Total Ingresos</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
+                  <p className="text-3xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
                 </div>
               </div>
               <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
+                                {/* Gráfico de torta - MEJORADO: con bordes para mayor separación visual */}
+                <div className="w-full" style={{ height: 300 }}>
                 <ResponsiveContainer width="100%" height={400}>
                   <RechartsPieChart>
                     <Pie
@@ -154,6 +188,8 @@ export default function IncomesDashboard() {
                       labelLine={false}
                       outerRadius={120}
                       dataKey="value"
+                        stroke="#ffffff" // Borde blanco para separar segmentos
+                        strokeWidth={2}  // Grosor del borde
                     >
                       {chartData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
@@ -163,6 +199,41 @@ export default function IncomesDashboard() {
                     <Legend />
                   </RechartsPieChart>
                 </ResponsiveContainer>
+              </div>
+
+                              {/* Leyenda personalizada con más espacio */}
+                <div className="flex flex-wrap justify-center gap-4 mt-6 mb-4">
+                  {chartData.map((entry, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full"
+                        style={{ backgroundColor: entry.color }}
+                      />
+                      <span className="text-gray-700 text-sm font-medium">
+                        {entry.name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Tabla de ingresos por categoría - NUEVA SECCIÓN */}
+            <div className="mt-8 space-y-4">
+              <h4 className="font-semibold text-gray-700">Ingresos por categoría</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {chartData.sort((a,b) => b.value - a.value).map((c,i) => (
+                  <div key={i} className="flex justify-between items-center py-3 px-4 bg-gray-50 rounded-lg">
+                    <span className="flex items-center gap-3">
+                      <span
+                        className="w-4 h-4 rounded-full block border-2 border-white shadow-sm"
+                        style={{ backgroundColor: c.color }}
+                      />
+                      <span className="text-gray-700 font-medium">{c.name}</span>
+                    </span>
+                    <span className="font-semibold text-green-600">{formatCurrency(c.value)}</span>
+                  </div>
+                ))}
               </div>
 
               {/* Feature para cambiar de Period */}
