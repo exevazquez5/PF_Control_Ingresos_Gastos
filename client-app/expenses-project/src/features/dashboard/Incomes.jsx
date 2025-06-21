@@ -106,13 +106,13 @@ export default function IncomesDashboard() {
   
   // datos para la torta
   const chartData = categories
-  .map(cat => {
+  .map((cat, index) => { 
     const sum = transactions
     .filter(t => t.categoryId === cat.id)
     .reduce((a,b) => a + b.amount, 0);
     return  {
       name: cat.name,
-      value: categorySum,
+      value: sum,
       color: getDistinctColor(index) // Color único basado en el índice
     };
   }).filter(d => d.value > 0);
@@ -177,7 +177,7 @@ export default function IncomesDashboard() {
                 </div>
               </div>
               <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
-                                {/* Gráfico de torta - MEJORADO: con bordes para mayor separación visual */}
+                {/* Gráfico de torta - MEJORADO: con bordes para mayor separación visual */}
                 <div className="w-full" style={{ height: 300 }}>
                 <ResponsiveContainer width="100%" height={400}>
                   <RechartsPieChart>
@@ -196,7 +196,7 @@ export default function IncomesDashboard() {
                       ))}
                     </Pie>
                     <Tooltip formatter={(value) => formatCurrency(value)} />
-                    <Legend />
+            
                   </RechartsPieChart>
                 </ResponsiveContainer>
               </div>
@@ -215,25 +215,6 @@ export default function IncomesDashboard() {
                     </div>
                   ))}
                 </div>
-              </div>
-            </div>
-
-            {/* Tabla de ingresos por categoría - NUEVA SECCIÓN */}
-            <div className="mt-8 space-y-4">
-              <h4 className="font-semibold text-gray-700">Ingresos por categoría</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {chartData.sort((a,b) => b.value - a.value).map((c,i) => (
-                  <div key={i} className="flex justify-between items-center py-3 px-4 bg-gray-50 rounded-lg">
-                    <span className="flex items-center gap-3">
-                      <span
-                        className="w-4 h-4 rounded-full block border-2 border-white shadow-sm"
-                        style={{ backgroundColor: c.color }}
-                      />
-                      <span className="text-gray-700 font-medium">{c.name}</span>
-                    </span>
-                    <span className="font-semibold text-green-600">{formatCurrency(c.value)}</span>
-                  </div>
-                ))}
               </div>
 
               {/* Feature para cambiar de Period */}
@@ -255,6 +236,10 @@ export default function IncomesDashboard() {
                 </button>
               </div>
             </div>
+
+            
+
+              
 
            {/* abajo: últimos 5 | totales por categoría */}
            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
