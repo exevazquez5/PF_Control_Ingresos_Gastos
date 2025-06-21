@@ -2,31 +2,21 @@ import React, { useState, useEffect } from "react";
 import axios from 'axios';
 import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
-import { PieChart, TrendingUp } from 'lucide-react';
+import { parseJwt } from "../../utils/jwt";
+import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
-function parseJwt(token) {
-  if (!token) return null;
-  try {
-    const base64Payload = token.split('.')[1];
-    const jsonPayload = decodeURIComponent(atob(base64Payload).split('').map(c =>
-      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-    ).join(''));
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    return null;
-  }
+const CREAM_PALETTE = [
+  '#fef3c7', '#fde68a', '#fcd34d', '#fbbf24', '#f59e0b',
+  '#eab308', '#fff7ed', '#fef9c3', '#fde047', '#facc15',
+  '#eab308', '#ffedd5', '#fed7aa', '#fdba74', '#fb923c',
+  '#f97316', '#ea580c', '#e2e8f0', '#f1f5f9', '#e0f2fe'
+];
+function getRandomCreamColor() {
+  return CREAM_PALETTE[Math.floor(Math.random() * CREAM_PALETTE.length)];
 }
-
-function generateRandomColor() {
-  let color;
-  do {
-    color = '#' + Math.floor(Math.random()*16777215).toString(16);
-  } while (/^(#?(?:[0]{6}|[fF]{6}|[cC]{6}|[eE]{6}|[dD]{6}|[aA]{6}))$/.test(color));
-  return color;
-}
-
 export default function IncomesDashboard() {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
@@ -35,6 +25,10 @@ export default function IncomesDashboard() {
   const [loading, setLoading] = useState(false);
 
   const [chartView, setChartView] = useState('pie');
+  // para el modal
+  const [showModal, setShowModal]       = useState(false);
+  const [monthOffset, setMonthOffset]   = useState(0);
+
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -81,19 +75,47 @@ export default function IncomesDashboard() {
     }).format(amount);
   };
 
-  const totalIncome = transactions.reduce((sum, t) => sum + t.amount, 0);
+  
+  // datos para la torta
+  const chartData = categories
+  .map(cat => {
+    const sum = transactions
+    .filter(t => t.categoryId === cat.id)
+    .reduce((a,b) => a + b.amount, 0);
+    return { name: cat.name, value: sum, color: getRandomCreamColor() };
+  })
+  .filter(d => d.value > 0);
 
-  const chartData = categories.map((cat) => {
-    const categorySum = transactions
-      .filter((t) => t.categoryId === cat.id)
-      .reduce((sum, t) => sum + t.amount, 0);
-    return {
-      name: cat.name,
-      value: categorySum,
-      color: generateRandomColor()
-    };
-  }).filter(d => d.value > 0);
-
+  const totalIncomes = chartData
+  .reduce((a,b) => a + b.value, 0);
+  
+  // últimos 5 movimientos
+  const lastFive = [...transactions]
+  .sort((a,b) => new Date(b.date) - new Date(a.date))
+  .slice(0,5);
+  
+  // para el modal: filtrar ingresos del mes
+  const zeroDate = new Date();
+  zeroDate.setDate(1);
+  zeroDate.setHours(0,0,0,0);
+  const baseMonth = new Date(zeroDate.getFullYear(), zeroDate.getMonth(), 1);
+  const selMonth = new Date(
+    baseMonth.getFullYear(),
+    baseMonth.getMonth() + monthOffset,
+    1
+  );
+  
+  const nextMonth = new Date(selMonth.getFullYear(), selMonth.getMonth()+1, 1);
+  
+  const modalList = transactions
+  .filter(t => {
+    const d = new Date(t.date);
+    return d >= selMonth && d < nextMonth;
+  })
+  .sort((a,b) => new Date(b.date) - new Date(a.date));
+  
+  const totalIncome = modalList.reduce((sum, t) => sum + t.amount, 0);
+  
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto">
@@ -111,15 +133,14 @@ export default function IncomesDashboard() {
         </div>
 
         {chartView === 'pie' && (
-          <div className="bg-white rounded-xl shadow-lg p-6">
-           
-            <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-semibold text-gray-800 dark:text-white mb-6 text-center">
               Ingresos por Categoría
             </h3>
             <div className="flex flex-col lg:flex-row items-center gap-8">
-               <div className="flex flex-col gap-4 lg:w-80">
-                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-                  <p className="text-gray-600 text-sm font-medium">Total Ingresos</p>
+                            <div className="flex flex-col gap-4 lg:w-80">
+                <div className="bg-green-50 dark:bg-gray-700 p-4 rounded-lg border-l-4 border-green-500">
+                  <p className="text-gray-600 dark:text-white text-sm font-medium">Total Ingresos</p>
                   <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
                 </div>
               </div>
@@ -143,11 +164,134 @@ export default function IncomesDashboard() {
                   </RechartsPieChart>
                 </ResponsiveContainer>
               </div>
-              
+
+              {/* Feature para cambiar de Period */}
+              <div className="flex items-center gap-2 mb-4 mt-4 mr-4">
+                <button
+                  onClick={() => setMonthOffset(m => m - 1)}
+                  className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+                >
+                  <ChevronLeft />
+                </button>
+                <h5 className="text-lg font-semibold dark:text-white">
+                  {selMonth.toLocaleDateString('es-AR',{ year:'numeric', month:'long' })}
+                </h5>
+                <button
+                  onClick={() => setMonthOffset(m => m + 1)}
+                  className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+                >
+                  <ChevronRight />
+                </button>
+              </div>
             </div>
-          </div>
+
+           {/* abajo: últimos 5 | totales por categoría */}
+           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+ 
+             {/* izquierda: últimos 5 */}
+             <div className="space-y-4">
+               <h4 className="font-semibold text-gray-700 dark:text-white">Últimos movimientos</h4>
+               {lastFive.map(tx => (
+                 <div key={tx.id} className="flex justify-between dark:text-white">
+                   <div>
+                     <p className="font-medium">{tx.description}</p>
+                     <p className="text-gray-500 dark:text-white text-sm">
+                       {new Date(tx.date).toLocaleDateString('es-AR')}
+                     </p>
+                   </div>
+                   <div className="font-medium text-green-600">
+                      +{formatCurrency(tx.amount)}
+                    </div>
+                 </div>
+               ))}
+               <button
+                 onClick={() => setShowModal(true)}
+                 className="mt-2 text-blue-600 hover:underline dark:bg-gray-600 dark:text-white dark:hover:bg-gray-500 text-sm"
+               >
+                 Ver todos los movimientos
+               </button>
+             </div>
+ 
+                {/* derecha: tabla de totales */}
+                <div className="space-y-4">
+                  <h4 className="font-semibold text-gray-700 dark:text-white">Ingresos por categoría</h4>
+                  {chartData.sort((a,b) => b.value - a.value).map((c,i) => (
+                    <div key={i} className="flex justify-between items-center py-2 border-b">
+                      <span className="flex items-center gap-2">
+                        <span
+                          className="w-3 h-3 rounded-full block"
+                          style={{ backgroundColor: c.color }}
+                        />
+                        <span className="text-gray-700 dark:text-white">{c.name}</span>
+                      </span>
+                      <span className="font-medium dark:text-white">{formatCurrency(c.value)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
         )}
-      </div>
-    </div>
-  );
+        
+       {/* Modal */}
+       {showModal && (
+         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+           <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl p-6 relative">
+             <button
+               onClick={() => setShowModal(false)}
+               className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+             >
+               <X />
+             </button>
+ 
+             <div className="flex justify-between items-center mb-4 pr-12">
+
+               <div className="flex items-center gap-2">
+                 <button
+                   onClick={() => setMonthOffset(m => m - 1)}
+                   className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+                 >
+                   <ChevronLeft />
+                 </button>
+                 <h5 className="text-lg font-semibold dark:text-white">
+                   {selMonth.toLocaleDateString('es-AR',{ year:'numeric', month:'long' })}
+                 </h5>
+                 <button
+                   onClick={() => setMonthOffset(m => m + 1)}
+                   className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+                 >
+                   <ChevronRight />
+                 </button>
+               </div>
+               <button
+                 onClick={() => setMonthOffset(0)}
+                 className="text-sm text-blue-600 hover:underline"
+               >
+                 Hoy
+               </button>
+             </div>
+ 
+             <div className="space-y-2 max-h-96 overflow-auto">
+               {modalList.length === 0 && (
+                 <p className="text-gray-500 dark:text-white">No hay ingresos este mes.</p>
+               )}
+               {modalList.map(tx => (
+                 <div key={tx.id} className="flex justify-between py-2 border-b">
+                   <div>
+                     <p className="font-medium">{tx.description}</p>
+                     <p className="text-gray-500 dark:text-white text-sm">
+                       {new Date(tx.date).toLocaleDateString('es-AR')}
+                     </p>
+                   </div>
+                   <div className="font-medium text-green-600">
+                      +{formatCurrency(tx.amount)}
+                    </div>
+                 </div>
+               ))}
+             </div>
+           </div>
+         </div>
+       )}
+     </div>
+   </div>
+   );
 }

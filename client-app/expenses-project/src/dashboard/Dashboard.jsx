@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from 'axios';
-import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3 } from 'lucide-react';
+import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3,ChevronLeft, ChevronRight } from 'lucide-react';
 import { PieChart as RechartsPieChart, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Pie } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import SuccessModal from './SucessModal';
@@ -27,6 +27,7 @@ const Dashboard = () => {
   const [isAdmin, setIsAdmin] = useState(false);
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [monthOffset, setMonthOffset] = useState(0);
 
   // Estado de transacciones
   const [transactions, setTransactions] = useState([]);
@@ -68,11 +69,24 @@ const Dashboard = () => {
   const [editingCategory, setEditingCategory] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState("");
 
-  const totalIncome = transactions
+
+
+  // Calculamos el primer día del mes seleccionado y el siguiente
+  const today       = new Date();
+  const startOfThis = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+  const startOfNext = new Date(startOfThis.getFullYear(), startOfThis.getMonth() + 1, 1);
+
+  // Filtramos solo las transacciones de ese mes
+  const periodTransactions = transactions.filter(t => {
+    const d = new Date(t.date);
+    return d >= startOfThis && d < startOfNext;
+  });
+
+  const totalIncome = periodTransactions
   .filter((t) => t.type === "ingreso")
   .reduce((sum, t) => sum + t.amount, 0);
 
-  const totalExpenses = transactions
+  const totalExpenses = periodTransactions
   .filter((t) => t.type === "gasto")
   .reduce((sum, t) => sum + t.amount, 0);
 
@@ -404,12 +418,9 @@ const Dashboard = () => {
   return (
     <div className="min-h-screen dark:bg-gray-700 bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <div className="max-w-7xl mx-auto dark:bg-gray-700">
+
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
-          {/* <div>
-            <h1 className="text-4xl font-bold text-gray-800 mb-2">GastAr App</h1>
-            <p className="text-gray-600">Gestioná tu economia de manera inteligente</p>
-          </div> */}
           
           <div className="flex items-center gap-4">
             {/* Chart View Selector */}
@@ -419,7 +430,7 @@ const Dashboard = () => {
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
                   chartView === 'default'
                     ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:text-white'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white'
                 }`}
               >
                 <Grid3X3 className="w-4 h-4" />
@@ -430,7 +441,7 @@ const Dashboard = () => {
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
                   chartView === 'pie'
                     ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:text-white'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white'
                 }`}
               >
                 <PieChart className="w-4 h-4" />
@@ -441,7 +452,7 @@ const Dashboard = () => {
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
                   chartView === 'bar'
                     ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:text-white'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white'
                 }`}
               >
                 <BarChart3 className="w-4 h-4" />
@@ -449,30 +460,35 @@ const Dashboard = () => {
               </button>
             </div>
 
-            {/* Botón de Cerrar Sesión*/}
-            {/* <button 
-              onClick={() => {
-                // Limpiar datos de sesión
-                localStorage.clear();
-                sessionStorage.clear();
-                
-                // Redirigir al login
-                window.location.replace('/login');
-              }}
-              className="bg-red-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-600 transition-all duration-200 shadow-lg"
-            >
-              Cerrar Sesión
-            </button> */}
-
             {/* Botón para abrir el Panel de Administración */}
-          {isAdmin && !showAdminPanel && (
+            {isAdmin && !showAdminPanel && (
+              <button
+                onClick={() => setShowAdminPanel(true)}
+                className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600 transition-all duration-200 shadow-lg"
+              >
+                Panel Admin
+              </button>
+            )}
+
+          </div>
+
+          {/* Feature para cambiar de Period */}
+          <div className="flex items-center gap-2 mb-4 mt-4 mr-4">
             <button
-              onClick={() => setShowAdminPanel(true)}
-              className="bg-blue-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-600 transition-all duration-200 shadow-lg"
+              onClick={() => setMonthOffset(m => m - 1)}
+              className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
             >
-              Panel Admin
+              <ChevronLeft />
             </button>
-          )}
+            <h5 className="text-lg font-semibold dark:text-white">
+              {startOfThis.toLocaleDateString('es-AR',{ year:'numeric', month:'long' })}
+            </h5>
+            <button
+              onClick={() => setMonthOffset(m => m + 1)}
+              className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+            >
+              <ChevronRight />
+            </button>
           </div>
 
         </div>
@@ -568,16 +584,16 @@ const Dashboard = () => {
                 </div>
                 
                 <div className="flex flex-col gap-4 lg:w-80">
-                  <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-                    <p className="text-gray-600 text-sm font-medium">Total Ingresos</p>
+                  <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 dark:bg-gray-700">
+                    <p className="text-gray-600 text-sm font-medium dark:text-white">Total Ingresos</p>
                     <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
                   </div>
-                  <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
-                    <p className="text-gray-600 text-sm font-medium">Total Gastos</p>
+                  <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 dark:bg-gray-700">
+                    <p className="text-gray-600 text-sm font-medium dark:text-white">Total Gastos</p>
                     <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
                   </div>
-                  <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
-                    <p className="text-gray-600 text-sm font-medium">Balance</p>
+                  <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500 dark:bg-gray-700">
+                    <p className="text-gray-600 text-sm font-medium dark:text-white">Balance</p>
                     <p className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                       {formatCurrency(balance)}
                     </p>
@@ -588,61 +604,61 @@ const Dashboard = () => {
           )}
 
           {chartView === 'bar' && (
-  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-    <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Comparación de Ingresos, Gastos y Balance</h3>
-    <div className="flex flex-col lg:flex-row items-center gap-8">
-      <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
-        <ResponsiveContainer width="100%" height={400}>
-          <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis tickFormatter={(value) => formatCurrency(value)} />
-            <Tooltip formatter={(value) => formatCurrency(value)} />
-            <Legend />
-            <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]}>
-              {barChartData.map((entry, index) => {
-                let color = '#6B7280'; // Color por defecto
-                if (entry.name === 'Ingresos') color = '#10B981';
-                else if (entry.name === 'Gastos') color = '#EF4444';
-                else if (entry.name === 'Balance') color = '#3B82F6';
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center dark:text-white">Comparación de Ingresos, Gastos y Balance</h3>
+            <div className="flex flex-col lg:flex-row items-center gap-8">
+              <div className="flex-1 w-full dark:text-white" style={{ minHeight: '400px' }}>
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis tickFormatter={(value) => formatCurrency(value)} />
+                    <Tooltip formatter={(value) => formatCurrency(value)} />
+                    <Legend />
+                    <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]}>
+                      {barChartData.map((entry, index) => {
+                        let color = '#6B7280'; // Color por defecto
+                        if (entry.name === 'Ingresos') color = '#10B981';
+                        else if (entry.name === 'Gastos') color = '#EF4444';
+                        else if (entry.name === 'Balance') color = '#3B82F6';
+                        
+                        return <Cell key={`cell-${index}`} fill={color} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
                 
-                return <Cell key={`cell-${index}`} fill={color} />;
-              })}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-                
-                <div className="flex flex-col gap-4 lg:w-80">
-                  <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-                    <p className="text-gray-600 text-sm font-medium">Total Ingresos</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
-                    <p className="text-xs text-gray-500 mt-1">Dinero que entra</p>
-                  </div>
-                  <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500">
-                    <p className="text-gray-600 text-sm font-medium">Total Gastos</p>
-                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
-                    <p className="text-xs text-gray-500 mt-1">Dinero que sale</p>
-                  </div>
-                  <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500">
-                    <p className="text-gray-600 text-sm font-medium">Balance</p>
-                    <p className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      {formatCurrency(balance)}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {balance >= 0 ? 'Saldo positivo' : 'Saldo negativo'}
-                    </p>
-                  </div>
+              <div className="flex flex-col gap-4 lg:w-80">
+                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 dark:bg-gray-700">
+                  <p className="text-gray-600 text-sm font-medium dark:text-white">Total Ingresos</p>
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
+                  <p className="text-xs text-gray-500 mt-1 dark:text-white">Dinero que entra</p>
+                </div>
+                <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 dark:bg-gray-700">
+                  <p className="text-gray-600 text-sm font-medium dark:text-white">Total Gastos</p>
+                  <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
+                  <p className="text-xs text-gray-500 mt-1  dark:text-white">Dinero que sale</p>
+                </div>
+                <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500 dark:bg-gray-700">
+                  <p className="text-gray-600 text-sm font-medium dark:text-white">Balance</p>
+                  <p className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                    {formatCurrency(balance)}
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1  dark:text-white">
+                    {balance >= 0 ? 'Saldo positivo' : 'Saldo negativo'}
+                  </p>
                 </div>
               </div>
             </div>
+          </div>
           )}
         </div>
 
 
         {/* Actions */}
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-semibold text-gray-800">Transacciones Recientes</h2>
+        <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">Transacciones Recientes</h2>
         <div className="flex gap-3">
           {/* Botón Gastos */}
           <button
@@ -690,7 +706,7 @@ const Dashboard = () => {
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
               {transactions.slice(0, 10).map((transaction) => (
-                <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 transition-colors">
+                <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                         transaction.type === 'ingreso' 
@@ -719,13 +735,13 @@ const Dashboard = () => {
                       <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(transaction)}
-                          className="text-blue-600 hover:text-blue-900 transition-colors p-1 hover:bg-blue-50 rounded"
+                          className="text-blue-600 hover:text-blue-900 transition-colors p-1 hover:bg-blue-50 dark:hover:bg-gray-400 rounded"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDelete(transaction)}
-                          className="text-red-600 hover:text-red-900 transition-colors p-1 hover:bg-red-50 rounded"
+                          className="text-red-600 hover:text-red-900 transition-colors p-1 hover:bg-red-50 dark:hover:bg-gray-400 rounded"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -859,7 +875,7 @@ const Dashboard = () => {
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
               <div className="p-6 border-b">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-2xl font-semibold text-gray-800">Panel de Administración</h3>
+                  <h3 className="text-2xl font-semibold text-gray-800 dark:text-white">Panel de Administración</h3>
                   <button onClick={() => setShowAdminPanel(false)} className="text-red-600 hover:text-red-800 text-lg font-bold px-3 py-1">
                       ✕
                     </button>
@@ -983,10 +999,10 @@ const Dashboard = () => {
               {/* Contenido del Panel */}
                 {adminView === 'summary' && (
                   <div className="space-y-6">
-                    <h4 className="text-lg font-semibold text-gray-800">Resumen de Usuario</h4>
+                    <h4 className="text-lg font-semibold text-gray-800 dark:text-white">Resumen de Usuario</h4>
                     <div className="flex gap-4 items-end">
                       <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-1">User ID</label>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID</label>
                         <input
                           type="number"
                           value={summaryUserId}
@@ -1038,10 +1054,10 @@ const Dashboard = () => {
 
                 {adminView === 'filter' && (
                   <div className="space-y-6">
-                    <h4 className="text-lg font-semibold text-gray-800">Filtrar Ingresos</h4>
+                    <h4 className="text-lg font-semibold text-gray-800 dark:text-white">Filtrar Ingresos</h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">User ID *</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID *</label>
                       <input
                         type="number"
                         value={filterParams.userId}
@@ -1051,7 +1067,7 @@ const Dashboard = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Category ID</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Category ID</label>
                       <input
                         type="number"
                         value={filterParams.categoryId}
@@ -1061,7 +1077,7 @@ const Dashboard = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Desde</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Fecha Desde</label>
                       <input
                         type="datetime-local"
                         value={filterParams.from}
@@ -1070,7 +1086,7 @@ const Dashboard = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Hasta</label>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Fecha Hasta</label>
                       <input
                         type="datetime-local"
                         value={filterParams.to}

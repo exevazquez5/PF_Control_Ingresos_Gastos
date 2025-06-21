@@ -6,6 +6,7 @@ import {
 } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { parseJwt } from "../../utils/jwt";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
@@ -17,16 +18,6 @@ const CREAM_PALETTE = [
 ];
 function getRandomCreamColor() {
   return CREAM_PALETTE[Math.floor(Math.random() * CREAM_PALETTE.length)];
-}
-
-function parseJwt(token) {
-  if (!token) return null;
-  try {
-    const payload = token.split('.')[1];
-    return JSON.parse(atob(payload));
-  } catch {
-    return null;
-  }
 }
 
 export default function ExpensesDashboard() {
@@ -88,11 +79,9 @@ export default function ExpensesDashboard() {
     })
     .filter(d => d.value > 0);
 
-  const totalExpenses = chartData
-    .reduce((a,b) => a + b.value, 0);
-
-  // últimos 5 movimientos
-  const lastFive = [...transactions]
+    
+    // últimos 5 movimientos
+    const lastFive = [...transactions]
     .sort((a,b) => new Date(b.date) - new Date(a.date))
     .slice(0,5);
 
@@ -107,13 +96,15 @@ export default function ExpensesDashboard() {
     1
   );
   const nextMonth = new Date(selMonth.getFullYear(), selMonth.getMonth()+1, 1);
-
+  
   const modalList = transactions
-    .filter(t => {
-      const d = new Date(t.date);
-      return d >= selMonth && d < nextMonth;
-    })
-    .sort((a,b) => new Date(b.date) - new Date(a.date));
+  .filter(t => {
+    const d = new Date(t.date);
+    return d >= selMonth && d < nextMonth;
+  })
+  .sort((a,b) => new Date(b.date) - new Date(a.date));
+  
+  const totalExpenses = modalList.reduce((sum, t) => sum + t.amount, 0);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -134,16 +125,16 @@ export default function ExpensesDashboard() {
         </div>
 
         {/* gráfico + totales */}
-        <div className="bg-white rounded-xl shadow-lg p-6 space-y-6">
-          <h3 className="text-xl font-semibold text-gray-800 text-center">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 space-y-6">
+          <h3 className="text-xl font-semibold text-gray-800 dark:text-white text-center">
             Gastos por Categoría
           </h3>
       
           <div className="flex flex-col lg:flex-row items-center gap-8">
             {/* total */}
             <div className="lg:w-64">
-              <div className="bg-green-50 p-6 rounded-lg border-l-4 border-green-500">
-                <p className="text-gray-600 text-sm font-medium">Total Gastos</p>
+              <div className="bg-green-50 dark:bg-gray-700 p-6 rounded-lg border-l-4 border-green-500">
+                <p className="text-gray-600 dark:text-white text-sm font-medium">Total Gastos</p>
                 <p className="text-3xl font-bold text-green-600">
                   {formatCurrency(totalExpenses)}
                 </p>
@@ -172,7 +163,24 @@ export default function ExpensesDashboard() {
               </ResponsiveContainer>
             </div>
 
-            
+            {/* Feature para cambiar de Period */}
+            <div className="flex items-center gap-2 mb-4 mt-4 mr-4">
+              <button
+                onClick={() => setMonthOffset(m => m - 1)}
+                className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+              >
+                <ChevronLeft />
+              </button>
+              <h5 className="text-lg font-semibold dark:text-white">
+                {selMonth.toLocaleDateString('es-AR',{ year:'numeric', month:'long' })}
+              </h5>
+              <button
+                onClick={() => setMonthOffset(m => m + 1)}
+                className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+              >
+                <ChevronRight />
+              </button>
+            </div>
           </div>
 
           {/* abajo: últimos 5 | totales por categoría */}
@@ -180,12 +188,12 @@ export default function ExpensesDashboard() {
 
             {/* izquierda: últimos 5 */}
             <div className="space-y-4">
-              <h4 className="font-semibold text-gray-700">Últimos movimientos</h4>
+              <h4 className="font-semibold text-gray-700 dark:text-white">Últimos movimientos</h4>
               {lastFive.map(tx => (
-                <div key={tx.id} className="flex justify-between">
+                <div key={tx.id} className="flex justify-between dark:text-white">
                   <div>
                     <p className="font-medium">{tx.description}</p>
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-gray-500 dark:text-white text-sm">
                       {new Date(tx.date).toLocaleDateString('es-AR')}
                     </p>
                   </div>
@@ -196,7 +204,7 @@ export default function ExpensesDashboard() {
               ))}
               <button
                 onClick={() => setShowModal(true)}
-                className="mt-2 text-blue-600 hover:underline text-sm"
+                className="mt-2 text-blue-600 hover:underline dark:bg-gray-600 dark:text-white dark:hover:bg-gray-500 text-sm"
               >
                 Ver todos los movimientos
               </button>
@@ -204,7 +212,7 @@ export default function ExpensesDashboard() {
 
             {/* derecha: tabla de totales */}
             <div className="space-y-4">
-              <h4 className="font-semibold text-gray-700">Gastos por categoría</h4>
+              <h4 className="font-semibold text-gray-700 dark:text-white">Gastos por categoría</h4>
               {chartData.sort((a,b) => b.value - a.value).map((c,i) => (
                 <div key={i} className="flex justify-between items-center py-2 border-b">
                   <span className="flex items-center gap-2">
@@ -212,9 +220,9 @@ export default function ExpensesDashboard() {
                       className="w-3 h-3 rounded-full block"
                       style={{ backgroundColor: c.color }}
                     />
-                    <span className="text-gray-700">{c.name}</span>
+                    <span className="text-gray-700 dark:text-white">{c.name}</span>
                   </span>
-                  <span className="font-medium">{formatCurrency(c.value)}</span>
+                  <span className="font-medium dark:text-white">{formatCurrency(c.value)}</span>
                 </div>
               ))}
             </div>
@@ -225,28 +233,29 @@ export default function ExpensesDashboard() {
       {/* Modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg w-full max-w-2xl p-6 relative">
+          <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl p-6 relative">
             <button
               onClick={() => setShowModal(false)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-white"
             >
               <X />
             </button>
 
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex justify-between items-center mb-4 pr-12">
+
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => setMonthOffset(m => m - 1)}
-                  className="p-1 hover:bg-gray-100 rounded"
+                  className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
                 >
                   <ChevronLeft />
                 </button>
-                <h5 className="text-lg font-semibold">
+                <h5 className="text-lg font-semibold dark:text-white">
                   {selMonth.toLocaleDateString('es-AR',{ year:'numeric', month:'long' })}
                 </h5>
                 <button
                   onClick={() => setMonthOffset(m => m + 1)}
-                  className="p-1 hover:bg-gray-100 rounded"
+                  className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
                 >
                   <ChevronRight />
                 </button>
@@ -261,13 +270,13 @@ export default function ExpensesDashboard() {
 
             <div className="space-y-2 max-h-96 overflow-auto">
               {modalList.length === 0 && (
-                <p className="text-gray-500">No hay gastos este mes.</p>
+                <p className="text-gray-500 dark:text-white">No hay gastos este mes.</p>
               )}
               {modalList.map(tx => (
                 <div key={tx.id} className="flex justify-between py-2 border-b">
                   <div>
                     <p className="font-medium">{tx.description}</p>
-                    <p className="text-gray-500 text-sm">
+                    <p className="text-gray-500 dark:text-white text-sm">
                       {new Date(tx.date).toLocaleDateString('es-AR')}
                     </p>
                   </div>
