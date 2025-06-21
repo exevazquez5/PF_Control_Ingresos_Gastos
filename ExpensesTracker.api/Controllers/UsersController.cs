@@ -178,7 +178,11 @@ public class UsersController : ControllerBase
 
         await _userService.SavePasswordResetTokenAsync(email, token, expiration);
 
-        var resetLink = $"https://localhost:7008/api/users/reset-password?token={token}";
+        // URL de tu SPA React en modo desarrollo (puede cambiar según tu dev-server)
+        var frontendUrl = "http://localhost:5173";
+
+        var resetLink =
+          $"{frontendUrl}/reset-password?token={token}";
 
         await _emailService.SendAsync(email, "Reset your password", $"Haz click aquí para cambiar tu contraseña: {resetLink}");
 

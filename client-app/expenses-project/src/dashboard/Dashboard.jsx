@@ -6,22 +6,19 @@ import { useNavigate } from 'react-router-dom';
 import SuccessModal from './SucessModal';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ErrorModal from "./ErrorModal";
+import { parseJwt } from '../utils/jwt';
+
+import {
+  postTransactionOnServer,
+  putTransactionOnServer,
+  deleteTransactionOnServer,
+  buildBody,
+  replaceTransaction,
+  addTransaction
+} from '../utils/transactionService';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
-
-function parseJwt(token) {
-  if (!token) return null;
-  try {
-    const base64Payload = token.split('.')[1];
-    const jsonPayload = decodeURIComponent(atob(base64Payload).split('').map(c =>
-      '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)
-    ).join(''));
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    return null;
-  }
-}
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -169,76 +166,60 @@ const Dashboard = () => {
 
     setLoading(true);
     try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-
       const isEditing = !!editingTransaction;
+      const tipoNuevo = formData.type.toLowerCase();
+      const tipoViejo = editingTransaction?.type.toLowerCase();
 
-      const body = {
-        amount: parseFloat(formData.amount),
-        description: formData.description,
-        date: new Date(formData.date).toISOString(), // aseguramos formato completo
-        categoryId: Number(formData.categoryId),
-        userId: Number(userId),
-        ...(isEditing && { id: editingTransaction.id }) // incluir solo en PUT
-      };
+      // determine base strings
+      const baseNuevo = tipoNuevo === 'ingreso' ? 'Incomes' : 'Expenses';
+      const baseViejo = tipoViejo === 'ingreso' ? 'Incomes' : 'Expenses';
 
-      const base = formData.type === "ingreso" ? "Incomes" : "Expenses";
-      const url = isEditing
-        ? `${BASE_URL}/api/${base}/${editingTransaction.id}`
-        : `${BASE_URL}/api/${base}`;
+      let newList = transactions;
+      const body = buildBody(formData, userId);
 
-      const method = isEditing ? axios.put : axios.post;
-      const response = await method(url, body, config);
+      if (isEditing && tipoNuevo !== tipoViejo) {
+        // change type: create new + delete old
+        const created = await postTransactionOnServer({ base: baseNuevo, body, token });
+        await deleteTransactionOnServer({ base: baseViejo, id: editingTransaction.id, token });
+        // remove old and add new
+        newList = transactions
+          .filter(t => t.id !== editingTransaction.id)
+          .concat({
+            id:          created.id,
+            ...body,
+            date:        formData.date,
+            type:        formData.type,
+            category:    categories.find(c => c.id === body.categoryId)?.name || ''
+          });
 
-      // Si es PUT y no devuelve contenido, usar el cuerpo local
-      const responseData = response.data || body;
+      } else if (isEditing) {
+        // simple edit: update server then local
+        await putTransactionOnServer({ base: baseNuevo, id: editingTransaction.id, body: { ...body, id: editingTransaction.id }, token });
+        newList = replaceTransaction(transactions, {
+          id:          editingTransaction.id,
+          ...body,
+          date:        formData.date,
+          category:    categories.find(c => c.id === body.categoryId)?.name || ''
+        });
 
-      if (typeof responseData !== 'object') {
-        throw new Error("Respuesta inválida del servidor");
-      }
-
-      if (isEditing) {
-        setTransactions(prev =>
-          prev.map(t =>
-            t.id === editingTransaction.id
-              ? {
-                  ...t,
-                  ...formData,
-                  amount: parseFloat(formData.amount),
-                  date: formData.date,
-                  type: formData.type,
-                  category: categories.find(c => c.id === Number(formData.categoryId))?.name || "",
-                  categoryId: Number(formData.categoryId),
-                }
-              : t
-          )
-        );
       } else {
-        setTransactions(prev => [
-          ...prev,
-          {
-            ...formData,
-            ...response.data,
-            amount: parseFloat(formData.amount),
-            type: formData.type,
-            date: formData.date,
-            category: categories.find(c => c.id === Number(formData.categoryId))?.name || "",
-            categoryId: Number(formData.categoryId),
-          }
-        ]);
+        // new transaction
+        const created = await postTransactionOnServer({ base: baseNuevo, body, token });
+        newList = addTransaction(transactions, {
+          id:          created.id,
+          ...body,
+          date:        formData.date,
+          type:        formData.type,
+          category:    categories.find(c => c.id === body.categoryId)?.name || ''
+        });
       }
 
+      setTransactions(newList);
       setShowSuccess(true);
-    } catch (err) {
-      console.error("Error creando/actualizando transacción:", err);
+      setEditingTransaction(null);
 
-      const msg =
-        err.response?.data?.title ||
-        err.response?.data ||  
-        "Error creando o actualizando transacción.";
-
-      setErrorMessage(msg);
-      setShowError(true);
+    } catch (error) {
+      // handle errors...
     } finally {
       setLoading(false);
     }
@@ -421,24 +402,24 @@ const Dashboard = () => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen dark:bg-gray-700 bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+      <div className="max-w-7xl mx-auto dark:bg-gray-700">
         {/* Header */}
         <div className="mb-8 flex justify-between items-center">
-          <div>
+          {/* <div>
             <h1 className="text-4xl font-bold text-gray-800 mb-2">GastAr App</h1>
             <p className="text-gray-600">Gestioná tu economia de manera inteligente</p>
-          </div>
+          </div> */}
           
           <div className="flex items-center gap-4">
             {/* Chart View Selector */}
-            <div className="flex bg-white rounded-lg shadow-lg p-1">
+            <div className="flex bg-white dark:bg-gray-800 rounded-lg shadow-lg p-1">
               <button
                 onClick={() => setChartView('default')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
                   chartView === 'default'
                     ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:text-white'
                 }`}
               >
                 <Grid3X3 className="w-4 h-4" />
@@ -449,7 +430,7 @@ const Dashboard = () => {
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
                   chartView === 'pie'
                     ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:text-white'
                 }`}
               >
                 <PieChart className="w-4 h-4" />
@@ -460,27 +441,29 @@ const Dashboard = () => {
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
                   chartView === 'bar'
                     ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100'
+                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:text-white'
                 }`}
               >
                 <BarChart3 className="w-4 h-4" />
                 Barras
               </button>
             </div>
-            {/* Botón de Cerrar Sesión - sin función */}
-<button 
-  onClick={() => {
-    // Limpiar datos de sesión
-    localStorage.clear();
-    sessionStorage.clear();
-    
-    // Redirigir al login
-    window.location.replace('/login');
-  }}
-  className="bg-red-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-600 transition-all duration-200 shadow-lg"
->
-  Cerrar Sesión
-</button>
+
+            {/* Botón de Cerrar Sesión*/}
+            {/* <button 
+              onClick={() => {
+                // Limpiar datos de sesión
+                localStorage.clear();
+                sessionStorage.clear();
+                
+                // Redirigir al login
+                window.location.replace('/login');
+              }}
+              className="bg-red-500 text-white px-6 py-3 rounded-lg font-medium hover:bg-red-600 transition-all duration-200 shadow-lg"
+            >
+              Cerrar Sesión
+            </button> */}
+
             {/* Botón para abrir el Panel de Administración */}
           {isAdmin && !showAdminPanel && (
             <button
@@ -491,15 +474,17 @@ const Dashboard = () => {
             </button>
           )}
           </div>
+
         </div>
+
         {/* Summary Cards / Charts */}
         <div className="mb-8">
           {chartView === 'default' && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-green-500">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-l-4 border-green-500">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Total Ingresos</p>
+                    <p className="text-gray-600 dark:text-white text-sm font-medium">Total Ingresos</p>
                     <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
                   </div>
                   <div className="bg-green-100 p-3 rounded-full">
@@ -508,10 +493,10 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-red-500">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-l-4 border-red-500">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Total Gastos</p>
+                    <p className="text-gray-600 dark:text-white text-sm font-medium">Total Gastos</p>
                     <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
                   </div>
                   <div className="bg-red-100 p-3 rounded-full">
@@ -520,10 +505,10 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              <div className="bg-white rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
+              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-l-4 border-blue-500">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-gray-600 text-sm font-medium">Balance</p>
+                    <p className="text-gray-600 dark:text-white text-sm font-medium">Balance</p>
                     <p className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                       {formatCurrency(balance)}
                     </p>
@@ -537,7 +522,7 @@ const Dashboard = () => {
           )}
 
           {chartView === 'pie' && (
-            <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
               <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Distribución de Ingresos vs Gastos</h3>
               <div className="flex flex-col lg:flex-row items-center gap-8">
                 <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
@@ -603,7 +588,7 @@ const Dashboard = () => {
           )}
 
           {chartView === 'bar' && (
-  <div className="bg-white rounded-xl shadow-lg p-6">
+  <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
     <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Comparación de Ingresos, Gastos y Balance</h3>
     <div className="flex flex-col lg:flex-row items-center gap-8">
       <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
@@ -653,6 +638,8 @@ const Dashboard = () => {
             </div>
           )}
         </div>
+
+
         {/* Actions */}
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-semibold text-gray-800">Transacciones Recientes</h2>
@@ -685,21 +672,23 @@ const Dashboard = () => {
           </button>
         </div>
     </div>
+
+
         {/* Transactions Table */}
-        <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Categoría</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Monto</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-white uppercase tracking-wider">Tipo</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-white uppercase tracking-wider">Categoría</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-white uppercase tracking-wider">Monto</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-white uppercase tracking-wider">Fecha</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-white uppercase tracking-wider">Descripción</th>
+                  <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-white uppercase tracking-wider">Acciones</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
               {transactions.slice(0, 10).map((transaction) => (
                 <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -711,7 +700,7 @@ const Dashboard = () => {
                         {transaction.type === 'ingreso' ? 'Ingreso' : 'Gasto'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 dark:text-white">
                       {transaction.category}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
@@ -719,11 +708,11 @@ const Dashboard = () => {
                         {transaction.type === 'ingreso' ? '+' : '-'}{formatCurrency(transaction.amount)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 flex items-center gap-1">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-white flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
                       {new Date(transaction.date).toLocaleDateString('es-AR')}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-900 max-w-xs truncate">
+                    <td className="px-6 py-4 text-sm text-gray-900 dark:text-white max-w-xs truncate">
                       {transaction.description}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -752,7 +741,7 @@ const Dashboard = () => {
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
               <div className="p-6">
                 <h3 className="text-xl font-semibold text-gray-800 mb-4">
                   {editingTransaction ? 'Editar Transacción' : 'Nueva Transacción'}
@@ -867,7 +856,7 @@ const Dashboard = () => {
         {/* Modal del Panel de Administración */}
         {isAdmin && showAdminPanel && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
               <div className="p-6 border-b">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-semibold text-gray-800">Panel de Administración</h3>
@@ -1026,16 +1015,16 @@ const Dashboard = () => {
                       <div className="bg-gray-50 rounded-lg p-4">
                         <h5 className="font-semibold text-gray-800 mb-3">Resultados:</h5>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="bg-white p-4 rounded-lg border-l-4 border-green-500">
-                            <p className="text-sm text-gray-600">Total Ingresos</p>
+                          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-green-500">
+                            <p className="text-sm text-gray-600 dark:text-white">Total Ingresos</p>
                             <p className="text-xl font-bold text-green-600">{formatCurrency(summaryData.totalIncome)}</p>
                           </div>
-                          <div className="bg-white p-4 rounded-lg border-l-4 border-red-500">
-                            <p className="text-sm text-gray-600">Total Gastos</p>
+                          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-red-500">
+                            <p className="text-sm text-gray-600 dark:text-white">Total Gastos</p>
                             <p className="text-xl font-bold text-red-600">{formatCurrency(summaryData.totalExpenses)}</p>
                           </div>
-                          <div className="bg-white p-4 rounded-lg border-l-4 border-blue-500">
-                            <p className="text-sm text-gray-600">Balance</p>
+                          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-blue-500">
+                            <p className="text-sm text-gray-600 dark:text-white">Balance</p>
                             <p className={`text-xl font-bold ${summaryData.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                               {formatCurrency(summaryData.balance)}
                             </p>

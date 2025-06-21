@@ -12,18 +12,32 @@ function ForgotPassword() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    setFeedback('');
+    setFeedback("");
+
+    const url = "https://localhost:7008/api/Users/forgot-password";
+    // ← aquí defines config
+    const config = {
+      headers: { "Content-Type": "application/json" }
+    };
 
     try {
-      // Endpoint real en tu API
-      await axios.post("https://localhost:7008/api/Users/forgot-password", { email });
+      // …
+      await axios.post(
+        url,
+        JSON.stringify(email), // además stringify para enviar "email" como JSON puro
+        config
+      );
       setFeedback("Si el correo es válido, te enviaremos instrucciones para restablecer tu contraseña.");
     } catch (error) {
+      // ahora verás si es un 400 real o un error de red/CORS
+      console.error("Error completo:", error);
+      console.log("Response:", error.response);
       setFeedback("Hubo un error. Verificá el correo o intentá más tarde.");
     } finally {
       setLoading(false);
     }
   };
+
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-sky-900 to-slate-900 px-4">

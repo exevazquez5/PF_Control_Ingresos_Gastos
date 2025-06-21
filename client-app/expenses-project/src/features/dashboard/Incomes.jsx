@@ -110,23 +110,19 @@ export default function IncomesDashboard() {
           </button>
         </div>
 
-        <div className="flex bg-white rounded-lg shadow-lg p-1 w-fit mb-6">
-          <button
-            onClick={() => setChartView('pie')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-all ${
-              chartView === 'pie' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-100'
-            }`}
-          >
-            <PieChart className="w-4 h-4" /> Torta
-          </button>
-        </div>
-
         {chartView === 'pie' && (
           <div className="bg-white rounded-xl shadow-lg p-6">
+           
             <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">
               Ingresos por Categoría
             </h3>
             <div className="flex flex-col lg:flex-row items-center gap-8">
+               <div className="flex flex-col gap-4 lg:w-80">
+                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
+                  <p className="text-gray-600 text-sm font-medium">Total Ingresos</p>
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
+                </div>
+              </div>
               <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
                 <ResponsiveContainer width="100%" height={400}>
                   <RechartsPieChart>
@@ -147,12 +143,7 @@ export default function IncomesDashboard() {
                   </RechartsPieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex flex-col gap-4 lg:w-80">
-                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500">
-                  <p className="text-gray-600 text-sm font-medium">Total Ingresos</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
-                </div>
-              </div>
+              
             </div>
           </div>
         )}
