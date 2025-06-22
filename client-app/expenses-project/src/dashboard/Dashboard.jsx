@@ -674,9 +674,17 @@ const Dashboard = () => {
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
+                    <XAxis dataKey="name"
+                    tick={{ fill: 'currentColor' }}
+              axisLine={{ stroke: 'currentColor' }}
+              tickLine={{ stroke: 'currentColor' }}
+              className="dark:text-white" />
                     <YAxis
   width={70}
+  tick={{ fill: 'currentColor' }}
+              axisLine={{ stroke: 'currentColor' }}
+              tickLine={{ stroke: 'currentColor' }}
+              className="dark:text-white"
   tickFormatter={(value) => {
     if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
     if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
