@@ -175,7 +175,7 @@ export default function ExpensesDashboard() {
                     <DollarSign className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                   </div>
                   <h3 className="text-2xl font-bold text-gray-800 dark:text-white">
-                    gastos por Categoría
+                    Gastos por Categoría
                   </h3>
                 </div>
                 
@@ -294,7 +294,7 @@ export default function ExpensesDashboard() {
               <div className="bg-orange-100 dark:bg-orange-900 p-3 rounded-lg">
                 <List className="w-8 h-8 text-orange-600 dark:text-orange-400" />
               </div>
-              <h4 className="text-xl font-bold text-gray-800 dark:text-white">gastos por Categoría</h4>
+              <h4 className="text-xl font-bold text-gray-800 dark:text-white">Gastos por Categoría</h4>
             </div>
             
             <div className="grid grid-cols-1 gap-4 flex-1 overflow-y-auto">
