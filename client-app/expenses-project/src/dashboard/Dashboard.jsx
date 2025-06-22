@@ -725,42 +725,38 @@ const Dashboard = () => {
           </div>
           )}
         </div>
-
-
         {/* Actions */}
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">Transacciones Recientes</h2>
-        <div className="flex gap-3">
-          {/* Botón Gastos */}
-          <button
-            onClick={() => navigate('/expenses')}
-            className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-          >
-            <TrendingDown className="w-5 h-5" />
-            Gastos
-          </button>
-          
-          {/* Botón Ingresos */}
-          <button
-            onClick={() => navigate('/incomes')}
-            className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-          >
-            <TrendingUp className="w-5 h-5" />
-            Ingresos
-          </button>
-          
-          {/* Botón Nueva Transacción */}
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-          >
-            <Plus className="w-5 h-5" />
-            Nueva Transacción
-          </button>
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">Transacciones Recientes</h2>
+          <div className="flex gap-3">
+            {/* Botón Gastos */}
+            <button
+              onClick={() => navigate('/expenses')}
+              className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+            >
+              <TrendingDown className="w-5 h-5" />
+              Gastos
+            </button>
+            
+            {/* Botón Ingresos */}
+            <button
+              onClick={() => navigate('/incomes')}
+              className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+            >
+              <TrendingUp className="w-5 h-5" />
+              Ingresos
+            </button>
+            
+            {/* Botón Nueva Transacción */}
+            <button
+              onClick={() => setShowModal(true)}
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
+            >
+              <Plus className="w-5 h-5" />
+              Nueva Transacción
+            </button>
+          </div>
         </div>
-    </div>
-
-
         {/* Transactions Table */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
           <div className="overflow-x-auto">
@@ -830,13 +826,13 @@ const Dashboard = () => {
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
               <div className="p-6">
-                <h3 className="text-xl font-semibold text-gray-800 mb-4">
+                <h3 className="text-xl font-semibold text-gray-800 mb-4 dark:text-white">
                   {editingTransaction ? 'Editar Transacción' : 'Nueva Transacción'}
                 </h3>
                 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Tipo</label>
                     <select
                       value={formData.type}
                       onChange={(e) => setFormData({...formData, type: e.target.value, category: ''})}
@@ -849,7 +845,7 @@ const Dashboard = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Categoría</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Categoría</label>
                     <select
                       value={formData.categoryId}
                       onChange={(e) => setFormData({...formData, categoryId: parseInt(e.target.value)})}
@@ -864,7 +860,7 @@ const Dashboard = () => {
                   </div>
                   {/*Monto maximo 10M */}
                   <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                 <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
                   Monto (máximo $10,000,000)
                   </label>
                   <input
@@ -891,7 +887,7 @@ const Dashboard = () => {
                         </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Fecha</label>
                     <input
                       type="date"
                       value={formData.date}
@@ -902,7 +898,7 @@ const Dashboard = () => {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Descripción</label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData({...formData, description: e.target.value})}
@@ -1218,7 +1214,9 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
       </div>
+
         {/* Modal de SucessModal */}
         {showSuccess && (
           <SuccessModal message="Cambios guardados correctamente." onClose={() => setShowSuccess(false)} />
