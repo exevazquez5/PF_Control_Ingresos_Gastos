@@ -196,32 +196,48 @@ const Dashboard = () => {
 
       await axios.put(`${BASE_URL}/api/Categories/${category.id}`, body, config);
       fetchCategories(token);
-    } catch (err) {
-  console.error("Error al editar categoría:", err);
+    } catch (error) {
+      console.error("Error al crear/editar categoría:", error);
 
-  let message = "Error al editar categoría";
+      const apiData = error.response?.data;
+      let msg = "";
 
-  // Si el backend devuelve un string plano como error
-  if (typeof err.response?.data === "string") {
-    message = err.response.data;
-  }
-  // Si devuelve un objeto con un campo 'message'
-  else if (typeof err.response?.data?.message === "string") {
-    message = err.response.data.message;
-  }
-  // Si devuelve un objeto directamente
-  else if (err.response?.data && typeof err.response.data === "object") {
-    message = JSON.stringify(err.response.data); // Como último recurso
-  }
+      if (apiData) {
+        // 1) Si viene un objeto con 'errors' tal y como en ProblemDetails:
+        if (apiData.errors && typeof apiData.errors === "object") {
+          // aplanamos todos los arrays de errores y los unimos en una cadena
+          const errorMessages = Object.values(apiData.errors).flat();
+          msg = errorMessages.join(", ");
+        }
+        // 2) Si viene un campo 'message' (tu JSON custom anterior)
+        else if (apiData.message) {
+          msg = apiData.message;
+        }
+        // 3) Si viene un 'title' (ProblemDetails.title)
+        else if (apiData.title) {
+          msg = apiData.title;
+        }
+        // 4) Si viene texto plano
+        else if (typeof apiData === "string") {
+          msg = apiData;
+        }
+      }
 
-  setErrorMessage(message);
-  setShowError(true);
-}
+      // 5) Fallback genérico
+      if (!msg) {
+        msg = error.message || "Ocurrió un error inesperado";
+      }
+
+      setErrorMessage(msg);
+      setShowError(true);
+    } finally {
+      setLoading(false);
+    }
 
   };
 
   const handleSubmit = () => {
-    if (!formData.amount || !formData.date || !formData.categoryId || isNaN(Number(formData.categoryId))) {
+    if (!formData.amount || !formData.date || !formData.categoryId || isNaN(Number(formData.categoryId)) || !formData.description) {
       setFormError("Completa todos los campos obligatorios");
       return;
     }
@@ -261,7 +277,8 @@ const Dashboard = () => {
             ...body,
             date:        formData.date,
             type:        formData.type,
-            category:    categories.find(c => c.id === body.categoryId)?.name || ''
+            category:    categories.find(c => c.id === body.categoryId)?.name || '',
+            description: formData.description
           });
 
       } else if (isEditing) {
@@ -271,7 +288,8 @@ const Dashboard = () => {
           id:          editingTransaction.id,
           ...body,
           date:        formData.date,
-          category:    categories.find(c => c.id === body.categoryId)?.name || ''
+          category:    categories.find(c => c.id === body.categoryId)?.name || '',
+          description: formData.description
         });
 
       } else {
@@ -282,7 +300,8 @@ const Dashboard = () => {
           ...body,
           date:        formData.date,
           type:        formData.type,
-          category:    categories.find(c => c.id === body.categoryId)?.name || ''
+          category:    categories.find(c => c.id === body.categoryId)?.name || '',
+          description: formData.description
         });
       }
 
@@ -291,7 +310,23 @@ const Dashboard = () => {
       setEditingTransaction(null);
 
     } catch (error) {
-      // handle errors...
+      console.error("Error al crear/editar transacción:", error);
+
+      // 1) Extraemos lo que venga de la API:
+      const apiData = error.response?.data;
+
+      // 2) Si viene un objeto con .message lo usamos,
+      //    si viene una cadena (texto plano) la usamos tal cual,
+      //    si no hay nada, fallback a error.message o un genérico.
+      const msg =
+        (apiData && typeof apiData === "object" && apiData.message) ||
+        (typeof apiData === "string" && apiData) ||
+        error.message ||
+        "Ocurrió un error inesperado";
+
+      // 3) Guardamos y mostramos
+      setErrorMessage(msg);
+      setShowError(true);
     } finally {
       setLoading(false);
     }
@@ -808,7 +843,8 @@ const Dashboard = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-white flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
-                      {new Date(transaction.date).toLocaleDateString('es-AR')}
+                      {new Date(transaction.date)
+                        .toLocaleDateString("es-AR", { timeZone: "UTC" })}
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-900 dark:text-white max-w-xs truncate">
                       {transaction.description}
@@ -973,8 +1009,8 @@ const Dashboard = () => {
                       setNotFoundMessage("");
                     }}
                     className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
-  adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-}`}
+                      adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
                   >
                     Resumen por Usuario
                   </button>
@@ -1029,10 +1065,12 @@ const Dashboard = () => {
                                 <>
                                   <button
                                     onClick={() => {
+                                      
                                       handleEditCategory({ id: cat.id, name: newCategoryName });
                                       setEditingCategory(null);
                                     }}
-                                    className="text-green-600 hover:text-green-800 px-3 py-1 rounded"
+                                    disabled={!newCategoryName.trim()}
+                                    className="text-green-600 hover:text-green-800 px-3 py-1 rounded disabled:cursor-not-allowed disabled:opacity-50"
                                   >
                                     Guardar
                                   </button>
@@ -1084,24 +1122,24 @@ const Dashboard = () => {
                 {adminView === 'summary' && (
                   <div className="space-y-6">
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-end">
-  <div className="flex-1">
-    <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID</label>
-    <input
-      type="number"
-      value={summaryUserId}
-      onChange={(e) => setSummaryUserId(e.target.value)}
-      className="w-full p-2 sm:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
-      placeholder="Ej: 7"
-    />
-  </div>
-  <button
-    onClick={() => fetchSummary(summaryUserId)}
-    disabled={loading}
-    className="bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto"
-  >
-    {loading ? 'Cargando...' : 'Obtener Resumen'}
-  </button>
-</div>
+                      <div className="flex-1">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID</label>
+                        <input
+                          type="number"
+                          value={summaryUserId}
+                          onChange={(e) => setSummaryUserId(e.target.value)}
+                          className="w-full p-2 sm:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                          placeholder="Ej: 7"
+                        />
+                      </div>
+                      <button
+                        onClick={() => fetchSummary(summaryUserId)}
+                        disabled={loading}
+                        className="bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto"
+                      >
+                        {loading ? 'Cargando...' : 'Obtener Resumen'}
+                      </button>
+                    </div>
 
                     {notFoundMessage && (
                       <p className="text-red-600 text-sm font-medium mt-2 ml-1">
@@ -1149,16 +1187,34 @@ const Dashboard = () => {
                         placeholder="Ej: 7"
                       />
                     </div>
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Category ID</label>
-                      <input
-                        type="number"
-                        value={filterParams.categoryId}
-                        onChange={(e) => setFilterParams({...filterParams, categoryId: e.target.value})}
+                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
+                        Categoría
+                      </label>
+                      <select
+                        value={filterParams.categoryId ?? ""}
+                        onChange={e =>
+                          setFilterParams({
+                            ...filterParams,
+                            // si el valor es cadena vacía, lo dejamos sin valor; 
+                            // si no, lo parseamos a entero
+                            categoryId: e.target.value
+                              ? parseInt(e.target.value, 10)
+                              : undefined
+                          })
+                        }
                         className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Ej: 4"
-                      />
+                      >
+                        <option value="">Seleccionar categoría</option>
+                        {categories.map(cat => (
+                          <option key={cat.id} value={cat.id}>
+                            {cat.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
+
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Fecha Desde</label>
                       <input
