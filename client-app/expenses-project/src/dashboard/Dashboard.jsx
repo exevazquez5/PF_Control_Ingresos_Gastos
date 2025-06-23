@@ -1048,19 +1048,19 @@ const Dashboard = () => {
                       <h4 className="text-lg font-semibold text-gray-800">Categorías</h4>
                       <ul className="space-y-2">
                         {categories.map((cat) => (
-                          <li key={cat.id} className="flex justify-between items-center bg-gray-100 p-3 rounded">
+                          <li key={cat.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-gray-100 p-3 rounded gap-2">
                             {editingCategory?.id === cat.id ? (
                               <input
                                 type="text"
                                 value={newCategoryName}
                                 onChange={(e) => setNewCategoryName(e.target.value)}
-                                className="border rounded p-2 mr-2 flex-1"
+                                className="border rounded p-2 flex-1 min-w-0"
                               />
                             ) : (
                               <span>{cat.name}</span>
                             )}
 
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-shrink-0">
                               {editingCategory?.id === cat.id ? (
                                 <>
                                   <button
