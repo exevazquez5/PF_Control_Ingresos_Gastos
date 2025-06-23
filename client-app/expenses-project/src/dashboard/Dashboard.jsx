@@ -483,9 +483,10 @@ const Dashboard = () => {
       <div className="max-w-7xl mx-auto dark:bg-gray-700">
 
         {/* Header */}
-        <div className="mb-8 flex justify-between items-center">
+        <div className="mb-8 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col md:flex-row items-center gap-4">
+
             {/* Chart View Selector */}
             <div className="flex bg-white dark:bg-gray-800 rounded-lg shadow-lg p-1">
               <button
@@ -603,7 +604,8 @@ const Dashboard = () => {
           {chartView === 'pie' && (
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
               <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Distribución de Ingresos vs Gastos</h3>
-              <div className="flex flex-col lg:flex-row items-center gap-8">
+              <div className="flex flex-col lg:flex-row items-center gap-8 w-full">
+
                 <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
                   <ResponsiveContainer width="100%" height={400}>
                     <RechartsPieChart>
@@ -669,7 +671,8 @@ const Dashboard = () => {
           {chartView === 'bar' && (
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
             <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center dark:text-white">Comparación de Ingresos, Gastos y Balance</h3>
-            <div className="flex flex-col lg:flex-row items-center gap-8">
+            <div className="flex flex-col lg:flex-row items-center gap-8 w-full">
+
               <div className="flex-1 w-full dark:text-white" style={{ minHeight: '400px' }}>
                 <ResponsiveContainer width="100%" height={400}>
                   <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
@@ -734,41 +737,45 @@ const Dashboard = () => {
           )}
         </div>
         {/* Actions */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-semibold text-gray-800 dark:text-white">Transacciones Recientes</h2>
-          <div className="flex gap-3">
-            {/* Botón Gastos */}
-            <button
-              onClick={() => navigate('/expenses')}
-              className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-            >
-              <TrendingDown className="w-5 h-5" />
-              Gastos
-            </button>
-            
-            {/* Botón Ingresos */}
-            <button
-              onClick={() => navigate('/incomes')}
-              className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-            >
-              <TrendingUp className="w-5 h-5" />
-              Ingresos
-            </button>
-            
-            {/* Botón Nueva Transacción */}
-            <button
-              onClick={() => setShowModal(true)}
-              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center gap-2 shadow-lg"
-            >
-              <Plus className="w-5 h-5" />
-              Nueva Transacción
-            </button>
-          </div>
-        </div>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
+  <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-white">
+    Transacciones Recientes
+  </h2>
+  
+  <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 w-full sm:w-auto">
+    {/* Botón Gastos */}
+    <button
+      onClick={() => navigate('/expenses')}
+      className="bg-gradient-to-r from-red-500 to-red-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
+    >
+      <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
+      <span>Gastos</span>
+    </button>
+    
+    {/* Botón Ingresos */}
+    <button
+      onClick={() => navigate('/incomes')}
+      className="bg-gradient-to-r from-green-500 to-green-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
+    >
+      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+      <span>Ingresos</span>
+    </button>
+    
+    {/* Botón Nueva Transacción - Ocupa toda la fila en móvil */}
+    <button
+      onClick={() => setShowModal(true)}
+      className="col-span-2 sm:col-span-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
+    >
+      <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+      <span>Nueva Transacción</span>
+    </button>
+  </div>
+</div>
         {/* Transactions Table */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
+          <div className="overflow-x-auto w-full">
+            <table className="w-full min-w-[600px]">
+
               <thead className="bg-gray-50 dark:bg-gray-800">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 dark:text-white uppercase tracking-wider">Tipo</th>
@@ -832,7 +839,8 @@ const Dashboard = () => {
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-2">
+
               <div className="p-6">
                 <h3 className="text-xl font-semibold text-gray-800 mb-4 dark:text-white">
                   {editingTransaction ? 'Editar Transacción' : 'Nueva Transacción'}
@@ -947,7 +955,8 @@ const Dashboard = () => {
         {/* Modal del Panel de Administración */}
         {isAdmin && showAdminPanel && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-6xl mx-2 sm:mx-4 max-h-[95vh] sm:max-h-[90vh] overflow-hidden">
+
               <div className="p-6 border-b">
                 <div className="flex justify-between items-center">
                   <h3 className="text-2xl font-semibold text-gray-800 dark:text-white">Panel de Administración</h3>
@@ -957,15 +966,15 @@ const Dashboard = () => {
                   </div>
 
                 {/* navegación admin */}
-                <div className="flex gap-4 mt-4 px-6">
+                <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mt-4 px-3 sm:px-6">
                   <button
                     onClick={() => {
                       setAdminView('summary');
                       setNotFoundMessage("");
                     }}
-                    className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                      adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
+                    className={`px-3 sm:px-4 py-2 rounded-lg font-medium transition-colors text-sm sm:text-base ${
+  adminView === 'summary' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+}`}
                   >
                     Resumen por Usuario
                   </button>
@@ -997,7 +1006,7 @@ const Dashboard = () => {
 
               </div>
 
-                <div className="p-6 overflow-y-auto max-h-[70vh]">
+                <div className="p-3 sm:p-6 overflow-y-auto max-h-[60vh] sm:max-h-[70vh]">
                   {adminView === 'categories' && (
                     <div className="space-y-6">
                       <h4 className="text-lg font-semibold text-gray-800">Categorías</h4>
@@ -1074,26 +1083,25 @@ const Dashboard = () => {
               {/* Contenido del Panel */}
                 {adminView === 'summary' && (
                   <div className="space-y-6">
-                    <h4 className="text-lg font-semibold text-gray-800 dark:text-white">Resumen de Usuario</h4>
-                    <div className="flex gap-4 items-end">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID</label>
-                        <input
-                          type="number"
-                          value={summaryUserId}
-                          onChange={(e) => setSummaryUserId(e.target.value)}
-                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="Ej: 7"
-                        />
-                      </div>
-                      <button
-                        onClick={() => fetchSummary(summaryUserId)}
-                        disabled={loading}
-                        className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                      >
-                        {loading ? 'Cargando...' : 'Obtener Resumen'}
-                      </button>
-                    </div>
+                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-end">
+  <div className="flex-1">
+    <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID</label>
+    <input
+      type="number"
+      value={summaryUserId}
+      onChange={(e) => setSummaryUserId(e.target.value)}
+      className="w-full p-2 sm:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+      placeholder="Ej: 7"
+    />
+  </div>
+  <button
+    onClick={() => fetchSummary(summaryUserId)}
+    disabled={loading}
+    className="bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto"
+  >
+    {loading ? 'Cargando...' : 'Obtener Resumen'}
+  </button>
+</div>
 
                     {notFoundMessage && (
                       <p className="text-red-600 text-sm font-medium mt-2 ml-1">

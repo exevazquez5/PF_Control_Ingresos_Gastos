@@ -151,13 +151,13 @@ export default function IncomesDashboard() {
       <div className="max-w-7xl mx-auto">
         
         {/* Header con navegación */}
-        <div className="mb-6 flex justify-between items-center">
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-800 mb-2 dark:text-white">Detalle de Ingresos</h1>
           </div>
           <button
             onClick={() => navigate('/dashboard')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-lg"
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-lg w-full sm:w-auto"
           >
             Volver al Inicio
           </button>
@@ -168,69 +168,75 @@ export default function IncomesDashboard() {
 
           {/* Bloque 1: Resumen de Ingresos con Gráfico - Ocupa toda la fila superior en desktop */}
           {chartView === 'pie' && (
-            <div className="xl:col-span-2 bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
-              <div className="flex items-center justify-between mb-6">
+            <div className="xl:col-span-2 bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6">
+              {/* Header mejorado para móviles */}
+              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
                 <div className="flex items-center space-x-3">
                   <div className="bg-blue-100 dark:bg-blue-900 p-3 rounded-lg">
                     <DollarSign className="w-8 h-8 text-blue-600 dark:text-blue-400" />
                   </div>
-                  <h3 className="text-2xl font-bold text-gray-800 dark:text-white">
+                  <h3 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">
                     Ingresos por Categoría
                   </h3>
                 </div>
                 
-                {/* Selector de Mes */}
-                <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-700 rounded-full px-6 py-3">
-                  <button
-                    onClick={() => setMonthOffset(m => m - 1)}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
-                  >
-                    <ChevronLeft className="w-5 h-5 text-gray-700 dark:text-white" />
-                  </button>
-                  <h5 className="text-lg font-semibold dark:text-white min-w-[140px] text-center">
-                    {selMonth.toLocaleDateString('es-AR', { year:'numeric', month:'long' })}
-                  </h5>
-                  <button
-                    onClick={() => setMonthOffset(m => m + 1)}
-                    className="p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
-                  >
-                    <ChevronRight className="w-5 h-5 text-gray-700 dark:text-white" />
-                  </button>
+                {/* Selector de Mes - Mejorado para móviles */}
+                <div className="flex items-center justify-center lg:justify-end">
+                  <div className="flex items-center gap-1 sm:gap-2 bg-gray-100 dark:bg-gray-700 rounded-full px-3 sm:px-6 py-2 sm:py-3">
+                    <button
+                      onClick={() => setMonthOffset(m => m - 1)}
+                      className="p-1 sm:p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
+                    >
+                      <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700 dark:text-white" />
+                    </button>
+                    <h5 className="text-sm sm:text-lg font-semibold dark:text-white min-w-[100px] sm:min-w-[140px] text-center px-1">
+                      {selMonth.toLocaleDateString('es-AR', { 
+                        year:'numeric', 
+                        month: window.innerWidth < 640 ? 'short' : 'long' 
+                      })}
+                    </h5>
+                    <button
+                      onClick={() => setMonthOffset(m => m + 1)}
+                      className="p-1 sm:p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
+                    >
+                      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700 dark:text-white" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid lg:grid-cols-2 gap-8 items-center">
+              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 items-center">
                 {/* Total de Ingresos */}
-                <div className="space-y-4">
+                <div className="space-y-4 order-2 lg:order-1">
                   <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-4 border-l-4 border-green-500">
                     <p className="text-green-700 dark:text-green-400 font-medium mb-2">Total Ingresos</p>
-                    <p className="text-3xl font-bold text-green-800 dark:text-green-300">
+                    <p className="text-2xl sm:text-3xl font-bold text-green-800 dark:text-green-300">
                       {formatCurrency(totalIncome)}
                     </p>
                   </div>
                   
-                  {/* Leyenda del gráfico */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Leyenda del gráfico - Mejorada para móviles */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
                     {chartData.map((entry, index) => (
                       <div key={index} className="flex items-center justify-start p-2 bg-gray-50 dark:bg-gray-700 rounded-lg space-x-2 dark:text-white">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: entry.color }}></div>
-                        <span>{entry.name}</span>
+                        <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }}></div>
+                        <span className="text-sm sm:text-base truncate">{entry.name}</span>
                       </div>
                     ))}
                   </div>
                 </div>
 
-                {/* Gráfico de Torta */}
-                <div className="flex justify-center">
-                  <div className="w-full" style={{ height: 280 }}>
-                    <ResponsiveContainer width="100%" height={280}>
+                {/* Gráfico de Torta - Responsivo */}
+                <div className="flex justify-center order-1 lg:order-2">
+                  <div className="w-full" style={{ height: window.innerWidth < 640 ? 200 : 280 }}>
+                    <ResponsiveContainer width="100%" height="100%">
                       <RechartsPieChart>
                         <Pie
                           data={chartData}
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          outerRadius={120}
+                          outerRadius={window.innerWidth < 640 ? 80 : 120}
                           dataKey="value"
                           stroke="#ffffff"
                           strokeWidth={2}
@@ -252,25 +258,25 @@ export default function IncomesDashboard() {
           )}
 
           {/* Bloque 2: Últimos Movimientos - Parte inferior izquierda */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 w-full max-w-full">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 w-full max-w-full">
             <div className="flex items-center space-x-3 mb-4">
               <div className="bg-purple-100 dark:bg-purple-900 p-3 rounded-lg">
-                <TrendingUp className="w-8 h-8 text-purple-600 dark:text-purple-400" />
+                <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 dark:text-purple-400" />
               </div>
-              <h4 className="text-xl font-bold text-gray-800 dark:text-white">Últimos Movimientos</h4>
+              <h4 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">Últimos Movimientos</h4>
             </div>
             
             <div className="space-y-3">
               {lastFive.map(tx => (
                 <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                  <div className="flex-1">
-                    <p className="font-medium text-gray-800 dark:text-white">{tx.description}</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-300">
+                  <div className="flex-1 min-w-0 pr-3">
+                    <p className="font-medium text-gray-800 dark:text-white truncate">{tx.description}</p>
+                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">
                       {new Date(tx.date).toLocaleDateString('es-AR')}
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-bold text-green-600 dark:text-green-400">
+                  <div className="text-right flex-shrink-0">
+                    <p className="font-bold text-green-600 dark:text-green-400 text-sm sm:text-base">
                       +{formatCurrency(tx.amount)}
                     </p>
                   </div>
@@ -281,7 +287,7 @@ export default function IncomesDashboard() {
             <div className="mt-4 text-center">
               <button
                 onClick={() => setShowModal(true)}
-                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium hover:underline"
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium hover:underline text-sm sm:text-base"
               >
                 Ver todos los movimientos
               </button>
@@ -289,93 +295,95 @@ export default function IncomesDashboard() {
           </div>
 
           {/* Bloque 3: Ingresos Agrupados por Categorías - Parte inferior derecha */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 flex flex-col">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 flex flex-col">
             <div className="flex items-center space-x-3 mb-4">
               <div className="bg-orange-100 dark:bg-orange-900 p-3 rounded-lg">
-                <List className="w-8 h-8 text-orange-600 dark:text-orange-400" />
+                <List className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600 dark:text-orange-400" />
               </div>
-              <h4 className="text-xl font-bold text-gray-800 dark:text-white">Ingresos por Categoría</h4>
+              <h4 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">Ingresos por Categoría</h4>
             </div>
             
             <div className="grid grid-cols-1 gap-4 flex-1 overflow-y-auto">
               {sortedChartData.map((c,i) => (
-
                 <div key={i} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600 rounded-xl px-4 py-3 border-l-4 border-gray-300 dark:border-gray-500">
                   <div className="flex items-center space-x-3 mb-2">
                     <div
-                        className="w-4 h-4 rounded-full"
+                        className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0"
                         style={{ backgroundColor: c.color }}
                       />
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-white">{c.name}</h3>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-white truncate">{c.name}</h3>
                   </div>
-                  <p className="text-lg font-bold text-gray-800 dark:text-white">
+                  <p className="text-base sm:text-lg font-bold text-gray-800 dark:text-white">
                     {formatCurrency(c.value)}
                   </p>
                   <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
                     {((c.value / chartData.reduce((acc, item) => acc + item.value, 0)) * 100).toFixed(1)}% del total
                   </p>
                 </div>
-
               ))}
             </div>
           </div>
 
         </div>
 
-        {/* Modal - Manteniendo tu funcionalidad existente */}
+        {/* Modal - Mejorado para móviles */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl p-6 relative">
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col relative">
               <button
                 onClick={() => setShowModal(false)}
-                className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-white"
+                className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-white z-10"
               >
-                <X />
+                <X className="w-5 h-5 sm:w-6 sm:h-6" />
               </button>
 
-              <div className="flex justify-between items-center mb-4 pr-12">
-                <div className="flex items-center gap-2">
+              <div className="p-4 sm:p-6 border-b">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pr-8 sm:pr-12">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setMonthOffset(m => m - 1)}
+                      className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+                    >
+                      <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </button>
+                    <h5 className="text-base sm:text-lg font-semibold dark:text-white">
+                      {selMonth.toLocaleDateString('es-AR', { year:'numeric', month:'long' })}
+                    </h5>
+                    <button
+                      onClick={() => setMonthOffset(m => m + 1)}
+                      className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+                    >
+                      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+                    </button>
+                  </div>
                   <button
-                    onClick={() => setMonthOffset(m => m - 1)}
-                    className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
+                    onClick={() => setMonthOffset(0)}
+                    className="text-sm text-blue-600 hover:underline"
                   >
-                    <ChevronLeft />
-                  </button>
-                  <h5 className="text-lg font-semibold dark:text-white">
-                    {selMonth.toLocaleDateString('es-AR', { year:'numeric', month:'long' })}
-                  </h5>
-                  <button
-                    onClick={() => setMonthOffset(m => m + 1)}
-                    className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
-                  >
-                    <ChevronRight />
+                    Hoy
                   </button>
                 </div>
-                <button
-                  onClick={() => setMonthOffset(0)}
-                  className="text-sm text-blue-600 hover:underline"
-                >
-                  Hoy
-                </button>
               </div>
 
-              <div className="space-y-2 max-h-96 overflow-auto">
-                {modalList.length === 0 && (
-                  <p className="text-gray-500 dark:text-white">No hay ingresos este mes.</p>
-                )}
-                {modalList.map(tx => (
-                  <div key={tx.id} className="flex justify-between py-2 border-b">
-                    <div>
-                      <p className="font-medium dark:text-white">{tx.description}</p>
-                      <p className="text-gray-500 dark:text-white text-sm">
-                        {new Date(tx.date).toLocaleDateString('es-AR')}
-                      </p>
+              <div className="p-4 sm:p-6 flex-1 overflow-auto">
+                <div className="space-y-2">
+                  {modalList.length === 0 && (
+                    <p className="text-gray-500 dark:text-white text-center py-8">No hay ingresos este mes.</p>
+                  )}
+                  {modalList.map(tx => (
+                    <div key={tx.id} className="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-600">
+                      <div className="flex-1 min-w-0 pr-3">
+                        <p className="font-medium dark:text-white text-sm sm:text-base truncate">{tx.description}</p>
+                        <p className="text-gray-500 dark:text-white text-xs sm:text-sm">
+                          {new Date(tx.date).toLocaleDateString('es-AR')}
+                        </p>
+                      </div>
+                      <div className="font-medium text-green-600 text-sm sm:text-base flex-shrink-0">
+                        +{formatCurrency(tx.amount)}
+                      </div>
                     </div>
-                    <div className="font-medium text-green-600">
-                      +{formatCurrency(tx.amount)}
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>

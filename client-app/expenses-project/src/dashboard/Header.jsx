@@ -20,7 +20,7 @@ export default function Header({ userName }) {
             alt="GastAr App Logo"
             className="h-8 w-auto"
           />
-          <span className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">
+          <span className="text-xl font-bold text-gray-900 dark:text-gray-100 tracking-tight hidden sm:block">
             GastAr App
           </span>
         </div>
