@@ -123,7 +123,7 @@ const Dashboard = () => {
       setNewCategoryName("");
       fetchCategories(token);
     } catch (err) {
-  console.error("Error al crear categoría:", err);
+  //console.error("Error al crear categoría:", err);
 
   let message = "Error al crear categoría";
 
@@ -161,7 +161,7 @@ const Dashboard = () => {
       await axios.delete(`${BASE_URL}/api/Categories/${id}`, config);
       fetchCategories(token);
     } catch (err) {
-    console.error("Error al eliminar categoría:", err);
+    //console.error("Error al eliminar categoría:", err);
 
     let message = "Error al eliminar categoría";
 
@@ -197,7 +197,7 @@ const Dashboard = () => {
       await axios.put(`${BASE_URL}/api/Categories/${category.id}`, body, config);
       fetchCategories(token);
     } catch (error) {
-      console.error("Error al crear/editar categoría:", error);
+      //console.error("Error al crear/editar categoría:", error);
 
       const apiData = error.response?.data;
       let msg = "";
@@ -310,7 +310,7 @@ const Dashboard = () => {
       setEditingTransaction(null);
 
     } catch (error) {
-      console.error("Error al crear/editar transacción:", error);
+      //console.error("Error al crear/editar transacción:", error);
 
       // 1) Extraemos lo que venga de la API:
       const apiData = error.response?.data;
@@ -398,7 +398,7 @@ const Dashboard = () => {
 
       setSummaryData(response.data);
     } catch (error) {
-      console.error("Error al obtener el resumen:", error);
+      //console.error("Error al obtener el resumen:", error);
 
       const msg =
         error.response?.data?.title ||  // Si usás ProblemDetails
@@ -438,7 +438,7 @@ const Dashboard = () => {
 
       setFilteredData(response.data);
     } catch (error) {
-      console.error("Error al obtener datos filtrados:", error);
+      //console.error("Error al obtener datos filtrados:", error);
       alert("No se pudieron obtener los datos filtrados.");
     } finally {
       setLoading(false);
@@ -1312,7 +1312,7 @@ const Dashboard = () => {
                 setTransactions(prev => prev.filter(t => t.id !== transaction.id));
                 setShowSuccess(true);
               } catch (err) {
-                console.error("Error eliminando transacción:", err);
+                //console.error("Error eliminando transacción:", err);
                 setShowError(true);
               } finally {
                 setConfirmDelete({ show: false, transaction: null });

@@ -208,9 +208,9 @@ export default function ExpensesDashboard() {
               <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 items-center">
                 {/* Total de gastos */}
                 <div className="space-y-4">
-                  <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-4 border-l-4 border-green-500">
-                    <p className="text-green-700 dark:text-green-400 font-medium mb-2">Total gastos</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-green-800 dark:text-green-300">
+                  <div className="bg-gradient-to-br from-red-50 to-red-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-4 border-l-4 border-red-500">
+                    <p className="text-red-700 dark:text-red-400 font-medium mb-2">Total gastos</p>
+                    <p className="text-2xl sm:text-3xl font-bold text-red-800 dark:text-red-300">
                       {formatCurrency(totalExpense)}
                     </p>
                   </div>
@@ -236,7 +236,7 @@ export default function ExpensesDashboard() {
                           cx="50%"
                           cy="50%"
                           labelLine={false}
-                          outerRadius="80%"
+                          outerRadius={window.innerWidth < 640 ? 80 : 120}
                           dataKey="value"
                           stroke="#ffffff"
                           strokeWidth={2}
@@ -276,8 +276,8 @@ export default function ExpensesDashboard() {
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-green-600 dark:text-green-400 text-sm sm:text-base">
-                      +{formatCurrency(tx.amount)}
+                    <p className="font-bold text-red-600 dark:text-red-400 text-sm sm:text-base">
+                      -{formatCurrency(tx.amount)}
                     </p>
                   </div>
                 </div>
@@ -385,8 +385,8 @@ export default function ExpensesDashboard() {
                           {new Date(tx.date).toLocaleDateString('es-AR')}
                         </p>
                       </div>
-                      <div className="font-medium text-green-600 flex-shrink-0 text-sm sm:text-base">
-                        +{formatCurrency(tx.amount)}
+                      <div className="font-medium text-red-600 flex-shrink-0 text-sm sm:text-base">
+                        -{formatCurrency(tx.amount)}
                       </div>
                     </div>
                   ))}
