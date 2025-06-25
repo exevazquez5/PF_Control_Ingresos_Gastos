@@ -3,7 +3,7 @@ import axios from 'axios';
 import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { parseJwt } from "../../utils/jwt";
-import { X, ChevronLeft, ChevronRight, DollarSign, TrendingUp, List } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, DollarSign, TrendingUp, List, Clock, AlertCircle, CheckCircle } from 'lucide-react';
 
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL;
@@ -146,6 +146,71 @@ export default function ExpensesDashboard() {
 
   const sortedChartData = [...chartData].sort((a, b) => b.value - a.value);
   
+
+// Variables mock para testing del componente
+
+const resumenCuotas = {
+  cuotasPendientes: 3,
+  montoPendiente: 10000, // Total acumulado de cuotas pendientes
+};
+
+const cuotasPendientes = [
+  {
+    id: 1,
+    descripcionGasto: 'Termo eléctrico',
+    categoria: 'Electrodomésticos',
+    nroCuota: 1,
+    fechaPago: '2024-06-15T00:00:00.000Z',
+    montoCuota: 3333.33,
+  },
+  {
+    id: 2,
+    descripcionGasto: 'Notebook Lenovo',
+    categoria: 'Electrónica',
+    nroCuota: 2,
+    fechaPago: '2024-06-20T00:00:00.000Z',
+    montoCuota: 3333.33,
+  },
+  {
+    id: 3,
+    descripcionGasto: 'Silla ergonómica',
+    categoria: 'Oficina',
+    nroCuota: 1,
+    fechaPago: '2024-06-25T00:00:00.000Z',
+    montoCuota: 3333.34,
+  },
+];
+
+// Para simular el mes y año actual
+const currentMonth = new Date().getMonth(); // 0 = enero
+const currentYear = new Date().getFullYear();
+
+// Lista de meses en español
+const meses = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+];
+
+// Función mock para formatear moneda
+const formatearMoneda = (valor) => {
+  return valor.toLocaleString('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 2,
+  });
+};
+
+// Función mock para simular el pago de cuota
+const pagarCuota = (id) => {
+  console.log(`Pagando cuota con ID: ${id}`);
+  alert(`Cuota con ID ${id} pagada (simulado)`);
+};
+
+const cuotasTotales = 6;
+const cuotasPagadas = cuotasTotales - resumenCuotas.cuotasPendientes;
+
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:bg-gradient-to-br dark:from-gray-900 dark:to-black p-4">
       <div className="max-w-7xl mx-auto">
@@ -214,7 +279,7 @@ export default function ExpensesDashboard() {
                       {formatCurrency(totalExpense)}
                     </p>
                   </div>
-                  
+
                   {/* Leyenda del gráfico - Responsive */}
                   <div className="grid grid-cols-1 gap-2 sm:gap-3">
                     {chartData.map((entry, index) => (
@@ -256,6 +321,103 @@ export default function ExpensesDashboard() {
               </div>
             </div>
           )}
+
+
+        {/* NUEVO BLOQUE REDISEÑADO DE CUOTAS */}
+          <div className="xl:col-span-2 w-full bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 space-y-6">
+
+            {/* Top: resumen cuotas y monto */}
+            <div className="flex flex-col md:flex-row gap-4">
+              <div className="flex-1 bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
+                <h4 className="text-sm text-gray-600 dark:text-gray-300">Cuotas pendientes este mes</h4>
+                <p className="text-2xl font-bold text-orange-600">{resumenCuotas.cuotasPendientes}</p>
+              </div>
+
+              <div className="flex-1 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
+                <h4 className="text-sm text-gray-600 dark:text-gray-300">Monto pendiente total</h4>
+                <p className="text-2xl font-bold text-yellow-600">{formatearMoneda(resumenCuotas.montoPendiente)}</p>
+              </div>
+            </div>
+
+            {/* Header */}
+            <div className="flex items-center space-x-2">
+              <Clock className="w-5 h-5 text-orange-500" />
+              <h4 className="text-lg font-semibold text-gray-800 dark:text-white">
+                Cuotas Pendientes - {meses[currentMonth]} {currentYear}
+              </h4>
+            </div>
+
+            {/* Cuotas + progreso lado a lado */}
+            <div className="space-y-4">
+              {cuotasPendientes.map((cuota) => {
+                const totalCuotas = cuota.totalCuotas || 6;
+                const pagadas = cuota.pagadas || (totalCuotas - cuota.restantes);
+                const progreso = (pagadas / totalCuotas) * 100;
+
+                return (
+                  <div key={cuota.id} className="flex gap-4 items-start grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Información del gasto */}
+                    <div className="flex-1 bg-orange-50 rounded-lg p-4 shadow-sm border border-orange-200">
+                      <div className="flex justify-between items-center">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2 mb-2">
+                            <AlertCircle className="w-4 h-4 text-orange-500" />
+                            <span className="font-medium text-gray-800 dark:text-white">{cuota.descripcionGasto}</span>
+                            <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs">
+                              {cuota.categoria}
+                            </span>
+                          </div>
+                          <div className="text-sm text-gray-600 dark:text-gray-300">
+                            Cuota {cuota.nroCuota} - Vence: {new Date(cuota.fechaPago).toLocaleDateString('es-AR')}
+                          </div>
+                          <div className="text-lg font-semibold text-orange-600 mt-1">
+                            {formatearMoneda(cuota.montoCuota)}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => pagarCuota(cuota.id)}
+                          className="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 transition-colors flex items-center space-x-2"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          <span>Pagar</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Progreso individual */}
+                    <div className=" min-w-[140px] min-h-[118px] bg-gray-100 dark:bg-gray-700 p-3 rounded shadow-sm h-fit">
+                      <h5 className="text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">Progreso de Pago</h5>
+                      <div className="w-full bg-gray-300 rounded-full h-2 mb-2">
+                        <div
+                          className="bg-green-500 h-2 rounded-full"
+                          style={{ width: `${progreso}%` }}
+                        ></div>
+                      </div>
+                      <p className="text-xs text-gray-600 dark:text-gray-300">
+                        Pagadas: <strong>{pagadas}</strong> / {totalCuotas}
+                      </p>
+                      <p className="text-xs text-gray-600 dark:text-gray-300">
+                        Pendientes: <strong>{cuota.restantes || totalCuotas - pagadas}</strong>
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Mostrar más (si aplica) */}
+            {cuotasPendientes.length > 3 && (
+              <div className="text-right mt-2">
+                <button
+                  className="text-sm text-orange-600 hover:underline"
+                  onClick={mostrarMasCuotas}
+                >
+                  Ver todas las cuotas pendientes ({cuotasPendientes.length - 3} más)
+                </button>
+              </div>
+            )}
+          </div>
+
 
           {/* Bloque 2: Últimos Movimientos */}
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 w-full max-w-full">
