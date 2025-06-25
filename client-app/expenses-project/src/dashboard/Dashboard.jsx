@@ -28,6 +28,10 @@ const Dashboard = () => {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [monthOffset, setMonthOffset] = useState(0);
+  const [enCuotas, setEnCuotas] = useState(false);
+const [cantidadCuotas, setCantidadCuotas] = useState('');
+const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
+
 
   // Estado de transacciones
   const [transactions, setTransactions] = useState([]);
@@ -236,17 +240,52 @@ const Dashboard = () => {
 
   };
 
-  const handleSubmit = () => {
-    if (!formData.amount || !formData.date || !formData.categoryId || isNaN(Number(formData.categoryId)) || !formData.description) {
-      setFormError("Completa todos los campos obligatorios");
-      return;
+  const handleSubmit = async () => {
+  if (
+    !formData.amount ||
+    !formData.date ||
+    !formData.categoryId ||
+    isNaN(Number(formData.categoryId)) ||
+    !formData.description
+  ) {
+    setFormError("Completa todos los campos obligatorios");
+    return;
+  }
+
+  const token = localStorage.getItem("token");
+
+  try {
+    if (formData.type === "gasto" && enCuotas) {
+      // Validar campos de cuotas
+      if (!cantidadCuotas || !fechaInicioCuotas) {
+        setFormError("Completá los datos de cuotas");
+        return;
+      }
+
+      const body = {
+        amount: parseFloat(formData.amount),
+        description: formData.description,
+        categoryId: parseInt(formData.categoryId),
+        cuotas: parseInt(cantidadCuotas),
+        fechaInicio: fechaInicioCuotas
+      };
+
+      await axios.post("/api/expenses/with-installments", body, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+    } else {
+      // Transacción normal
+      await createTransaction(formData); // tu función existente
     }
 
-    createTransaction(formData);
     resetForm();
+    setFormError("");
+  } catch (error) {
+    console.error(error);
+    setFormError("Ocurrió un error al guardar la transacción.");
+  }
+};
 
-    setFormError('');
-  };
 
   const createTransaction = async (formData) => {
     const token = localStorage.getItem("token");
@@ -454,6 +493,9 @@ const Dashboard = () => {
       description: '',
       categoryId: ''
     });
+    setEnCuotas(false);
+  setCantidadCuotas('');
+  setFechaInicioCuotas('');
     setEditingTransaction(null);
     setShowModal(false);
   };
@@ -965,6 +1007,48 @@ const Dashboard = () => {
                       {formError}
                     </div>
                   )}
+
+                  {/* Opción en cuotas */}
+<div>
+  <label className="inline-flex items-center text-sm font-medium text-gray-700 dark:text-white">
+    <input
+      type="checkbox"
+      checked={enCuotas}
+      onChange={(e) => setEnCuotas(e.target.checked)}
+      className="form-checkbox h-4 w-4 text-blue-600"
+    />
+    <span className="ml-2">¿Este gasto es en cuotas?</span>
+  </label>
+</div>
+
+{enCuotas && (
+  <>
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Cantidad de cuotas</label>
+      <input
+        type="number"
+        min="1"
+        value={cantidadCuotas}
+        onChange={(e) => setCantidadCuotas(e.target.value)}
+        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        required
+      />
+    </div>
+
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Fecha de inicio de pago</label>
+      <input
+        type="date"
+        value={fechaInicioCuotas}
+        onChange={(e) => setFechaInicioCuotas(e.target.value)}
+        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        required
+      />
+    </div>
+  </>
+)}
+
+
 
                   <div className="flex gap-3 pt-4">
                     <button

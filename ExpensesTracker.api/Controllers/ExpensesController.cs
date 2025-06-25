@@ -1,4 +1,5 @@
-﻿using ExpensesTracker.api.Dtos.Expense;
+﻿using ExpensesTracker.api.Data;
+using ExpensesTracker.api.Dtos.Expense;
 using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -13,11 +14,13 @@ public class ExpensesController : ControllerBase
 {
     private readonly IExpenseService _expenseService;
     private readonly ICategoryService _categoryService;
+    private readonly AppDbContext _context;
 
-    public ExpensesController(IExpenseService expenseService, ICategoryService categoryService)
+    public ExpensesController(IExpenseService expenseService, ICategoryService categoryService, ApplDbContext context)
     {
         _expenseService = expenseService;
         _categoryService = categoryService;
+        _context = context;
     }
 
     [Authorize]
@@ -243,5 +246,89 @@ public class ExpensesController : ControllerBase
 
         return NoContent();
     }
+
+    [Authorize]
+    [HttpPost("with-installments")]
+    public async Task<IActionResult> CreateExpenseWithInstallments([FromBody] GastoConCuotasDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        if (dto.Amount <= 0)
+            return BadRequest("El monto debe ser mayor a cero.");
+
+        if (dto.Cuotas <= 0)
+            return BadRequest("La cantidad de cuotas debe ser mayor a cero.");
+
+        if (dto.FechaInicio > DateTime.Now)
+            return BadRequest("La fecha de inicio no puede ser futura.");
+
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+            return Unauthorized("Token inválido.");
+
+        var category = await _categoryService.GetByIdAsync(dto.CategoryId);
+        if (category == null)
+            return BadRequest($"La categoría con id {dto.CategoryId} no existe.");
+
+        var gasto = new Expense
+        {
+            Amount = dto.Amount,
+            Description = dto.Description,
+            Date = dto.FechaInicio,
+            CategoryId = dto.CategoryId,
+            UserId = userId
+        };
+
+        _context.Expenses.Add(gasto);
+        await _context.SaveChangesAsync();
+
+        decimal montoPorCuota = Math.Round(dto.Amount / dto.Cuotas, 2);
+
+        for (int i = 0; i < dto.Cuotas; i++)
+        {
+            var cuota = new PagoCuota
+            {
+                ExpenseId = gasto.Id,
+                NroCuota = i + 1,
+                MontoCuota = montoPorCuota,
+                FechaPago = dto.FechaInicio.AddMonths(i),
+                Estado = "pendiente"
+            };
+            _context.PagosCuotas.Add(cuota);
+        }
+
+        await _context.SaveChangesAsync();
+
+        return CreatedAtAction(nameof(GetById), new { id = gasto.Id }, gasto);
+    }
+
+
+    [HttpGet("cuotas/{userId}/{anio}/{mes}")]
+    public async Task<IActionResult> GetCuotasDelMes(int userId, int anio, int mes)
+    {
+        var cuotas = await _context.PagosCuotas
+            .Include(pc => pc.Expense)
+            .Where(pc => pc.Expense.UserId == userId && pc.FechaPago.Month == mes && pc.FechaPago.Year == anio)
+            .ToListAsync();
+
+        return Ok(cuotas);
+    }
+
+    [Authorize]
+    [HttpPut("cuotas/{id}/pagar")]
+    public async Task<IActionResult> MarcarCuotaPagada(int id)
+    {
+        var cuota = await _context.PagosCuotas.FindAsync(id);
+        if (cuota == null)
+            return NotFound();
+
+        cuota.Estado = "pagada";
+        await _context.SaveChangesAsync();
+
+        return Ok();
+    }
+
+
 
 }

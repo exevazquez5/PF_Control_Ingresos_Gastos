@@ -13,5 +13,9 @@ namespace ExpensesTracker.api.Data
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<Income> Incomes { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
+
+        public DbSet<PagoCuota> PagosCuotas { get; set; }
+
+
     }
 }

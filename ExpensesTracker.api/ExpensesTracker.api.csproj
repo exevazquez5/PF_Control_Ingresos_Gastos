@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="DTOs\GastoConCuotas\" />
     <Folder Include="DTOs\ResetPassword\" />
     <Folder Include="Mappings\" />
     <Folder Include="Validators\" />
