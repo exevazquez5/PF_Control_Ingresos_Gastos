@@ -57,10 +57,8 @@ export default function ExpensesDashboard() {
   const [monthOffset, setMonthOffset]   = useState(0);
 
   const [cuotasPendientes, setCuotasPendientes] = useState([]);
-const [resumenCuotas, setResumenCuotas] = useState({
-  cuotasPendientes: 0,
-  montoPendiente: 0,
-});
+  const [resumenCuotas, setResumenCuotas] = useState(null);
+
 
 
 
@@ -96,26 +94,38 @@ const fetchCuotasPendientes = async (token, userId, offset = 0) => {
     const data = await response.json();
 
     const cuotas = data
-      .filter(cuota => cuota.estado !== "pagada") // importante para evitar que vuelvan a aparecer
-      .map((cuota) => ({
-        id: cuota.id,
-        descripcionGasto: cuota.expense.description,
-        categoria: cuota.expense.category?.nombre || 'Sin categoría',
-        nroCuota: cuota.nroCuota,
-        fechaPago: cuota.fechaPago,
-        montoCuota: cuota.montoCuota,
-      }));
+    .filter(cuota => cuota.estado !== "pagada")
+    .map((cuota) => ({
+      id: cuota.id,
+      descripcionGasto: cuota.expense?.description || 'Sin descripción',
+      categoria: cuota.expense?.category?.nombre || 'Sin categoría',
+      nroCuota: cuota.nroCuota,
+      fechaPago: cuota.fechaPago,
+      montoCuota: cuota.montoCuota,
+      pagadas: cuota.pagadas ?? null,
+      restantes: cuota.restantes ?? null,
+      totalCuotas: cuota.totalCuotas ?? null,
+    }));
 
     const montoPendiente = cuotas.reduce((sum, c) => sum + c.montoCuota, 0);
     setCuotasPendientes(cuotas);
-    setResumenCuotas({
-      cuotasPendientes: cuotas.length,
-      montoPendiente,
-    });
   } catch (err) {
     console.error('Error al obtener cuotas pendientes:', err);
   }
 };
+
+useEffect(() => {
+  if (!cuotasPendientes) return;
+
+  const total = cuotasPendientes.length;
+  const monto = cuotasPendientes.reduce((sum, c) => sum + c.montoCuota, 0);
+
+  setResumenCuotas({
+    cuotasPendientes: total,
+    montoPendiente: monto,
+  });
+}, [cuotasPendientes]);
+
 
   const fetchCategories = async (token) => {
     try {
@@ -245,11 +255,6 @@ const pagarCuota = async (idCuota) => {
     if (!cuotaPagada) return;
 
     setCuotasPendientes(prev => prev.filter(c => c.id !== idCuota));
-
-    setResumenCuotas(prev => ({
-      cuotasPendientes: prev.cuotasPendientes - 1,
-      montoPendiente: prev.montoPendiente - cuotaPagada.montoCuota
-    }));
 
     await fetchExpenses(token, userId);
   } catch (error) {
@@ -414,12 +419,16 @@ const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
             <div className="flex flex-col md:flex-row gap-4">
               <div className="flex-1 bg-orange-50 border-l-4 border-orange-500 p-4 rounded">
                 <h4 className="text-sm text-gray-600 dark:text-gray-300">Cuotas pendientes este mes</h4>
-                <p className="text-2xl font-bold text-orange-600">{resumenCuotas.cuotasPendientes}</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {resumenCuotas ? resumenCuotas.cuotasPendientes : 0}
+                </p>
               </div>
 
               <div className="flex-1 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
                 <h4 className="text-sm text-gray-600 dark:text-gray-300">Monto pendiente total</h4>
-                <p className="text-2xl font-bold text-yellow-600">{formatCurrency(resumenCuotas.montoPendiente)}</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {formatCurrency(resumenCuotas ? resumenCuotas.montoPendiente : 0)}
+                </p>
               </div>
             </div>
 

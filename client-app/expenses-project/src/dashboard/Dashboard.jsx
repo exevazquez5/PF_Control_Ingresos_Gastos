@@ -185,7 +185,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
       categoryId: cuota.categoryId ,
       amount: cuota.montoCuota,
       date: cuota.fechaPago, // ✅ Esta es la fecha real del gasto
-      type: "cuota",
+      type: "gasto",
     }));
   } catch (err) {
     console.error("Error al obtener cuotas pagadas:", err);
@@ -599,7 +599,8 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
   const handleDelete = (transaction) => {
     setConfirmDelete({
       show: true,
-      transaction: transaction
+      target: transaction,
+      type: "transaction"
     });
   };
 
@@ -636,7 +637,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
     };
 
     init();
-  }, []);
+  }, [monthOffset]); 
 
   return (
     //<div className="min-h-screen dark:bg-gray-700 bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
@@ -908,8 +909,9 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 font-semibold">
                       <span className={transaction.type === 'ingreso' ? 'text-green-600' : 'text-red-600'}>
-                        {transaction.type === 'ingreso' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                        {formatCurrency(transaction.amount)}
                       </span>
+
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-white flex items-center gap-1">
                       <Calendar className="w-4 h-4" />
@@ -1493,13 +1495,18 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
           <SuccessModal message="Cambios guardados correctamente." onClose={() => setShowSuccess(false)} />
         )}
         {/* Modal de ConfirmDeleteModal */}
-        {confirmDelete.show && (
+        {confirmDelete.show && confirmDelete.target && (
           <ConfirmDeleteModal
             message={
               confirmDelete.type === "transaction"
-                ? `¿Estás seguro de eliminar esta transacción de ${formatCurrency(confirmDelete.target.amount)}?`
-                : `¿Estás seguro de eliminar la categoría "${confirmDelete.target.name}"?`
+                ? confirmDelete.target
+                  ? `¿Estás seguro de eliminar esta transacción de ${formatCurrency(confirmDelete.target.amount)}?`
+                  : "¿Estás seguro de eliminar esta transacción?"
+                : confirmDelete.target
+                  ? `¿Estás seguro de eliminar la categoría "${confirmDelete.target.name}"?`
+                  : "¿Estás seguro de eliminar esta categoría?"
             }
+
             onCancel={() => setConfirmDelete({ show: false, target: null, type: null })}
             onConfirm={async () => {
               const token = localStorage.getItem("token");
@@ -1515,7 +1522,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
                   setTransactions(prev => prev.filter(t => t.id !== item.id));
                 } else if (confirmDelete.type === "category") {
                   await axios.delete(`${BASE_URL}/api/Categories/${item.id}`, config);
-                  fetchCategoriesByType(currentType); // 👈 actualiza después de borrar
+                  fetchCategoriesByType(currentType);
                 }
 
                 setShowSuccess(true);
@@ -1527,6 +1534,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
             }}
           />
         )}
+
 
         {/* Modal de ErrorModal */}
         {showError && (
