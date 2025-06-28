@@ -9,6 +9,9 @@ namespace ExpensesTracker.api.Models
         [Required(ErrorMessage = "Name is required")]
         public string Name { get; set; } = string.Empty;
 
-        public ICollection<Expense>? Expenses { get; set; } = null;
+        public string Type { get; set; } = "gasto"; // o "ingreso"
+
+
+        public ICollection<Expense> Expenses { get; set; } = new List<Expense>();
     }
 }

@@ -27,7 +27,8 @@ public class CategoriesController : ControllerBase
         var categoryDtos = categories.Select(c => new CategoryDto
         {
             Id = c.Id,
-            Name = c.Name
+            Name = c.Name,
+            Type = c.Type
         });
 
         return Ok(categoryDtos);
@@ -43,7 +44,8 @@ public class CategoriesController : ControllerBase
         var dto = new CategoryDto
         {
             Id = category.Id,
-            Name = category.Name
+            Name = category.Name,
+            Type = category.Type
         };
 
         return Ok(dto);
@@ -87,7 +89,8 @@ public class CategoriesController : ControllerBase
 
         var category = new Category
         {
-            Name = nombreCapitalizado
+            Name = nombreCapitalizado,
+            Type = dto.Type.ToLower()
         };
 
         var created = await _categoryService.CreateAsync(category);
@@ -100,12 +103,6 @@ public class CategoriesController : ControllerBase
 
         return CreatedAtAction(nameof(GetById), new { id = result.Id }, result);
     }
-    private string Capitalizar(string input)
-    {
-        if (string.IsNullOrWhiteSpace(input)) return input;
-        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(input.ToLower());
-    }
-
 
     [Authorize]
     [HttpPut("{id}")]
@@ -153,7 +150,8 @@ public class CategoriesController : ControllerBase
         var category = new Category
         {
             Id = dto.Id,
-            Name = nombreCapitalizado
+            Name = nombreCapitalizado,
+            Type = dto.Type.ToLower()
         };
 
         var updated = await _categoryService.UpdateAsync(category);
@@ -161,8 +159,6 @@ public class CategoriesController : ControllerBase
 
         return NoContent();
     }
-
-
 
     [Authorize]
     [HttpDelete("{id}")]
@@ -179,5 +175,32 @@ public class CategoriesController : ControllerBase
         if (!deleted) return BadRequest("No se puede eliminar la categoría porque está siendo utilizada por ingresos o gastos.");
 
         return NoContent();
+    }
+
+    [Authorize]
+    [HttpGet("by-type/{type}")]
+    public async Task<IActionResult> GetByType(string type)
+    {
+        type = type.ToLower();
+        if (type != "ingreso" && type != "gasto")
+            return BadRequest("El tipo debe ser 'ingreso' o 'gasto'.");
+
+        var all = await _categoryService.GetAllAsync();
+        var filtered = all
+        .Where(c => c.Type.ToLower() == type)
+        .Select(c => new CategoryDto
+        {
+            Id = c.Id,
+            Name = c.Name,
+            Type = c.Type
+        });
+
+        return Ok(filtered);
+    }
+
+    private string Capitalizar(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return input;
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(input.ToLower());
     }
 }

@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from "react";
 import axios from 'axios';
 import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3,ChevronLeft, ChevronRight } from 'lucide-react';
-import { PieChart as RechartsPieChart, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Pie } from 'recharts';
+import { PieChart as RechartsPieChart, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Pie } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import SuccessModal from './SucessModal';
 import ConfirmDeleteModal from './ConfirmDeleteModal';
 import ErrorModal from "./ErrorModal";
 import { parseJwt } from '../utils/jwt';
-
+import TimeSeriesChart from './TimeSeriesChart';
 import {
   postTransactionOnServer,
   putTransactionOnServer,
@@ -43,12 +43,15 @@ const Dashboard = () => {
   const [formError, setFormError] = useState('');
   const [chartView, setChartView] = useState('default');
 
+  const [filteredData, setFilteredData] = useState('');
+
   // Estado de modales
   const [showModal, setShowModal] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
   const [showError, setShowError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [confirmDelete, setConfirmDelete] = useState({ show: false, transaction: null });
+  const [confirmDelete, setConfirmDelete] = useState({ show: false, target: null, type: null });
+
 
   // Panel admin
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -61,14 +64,16 @@ const Dashboard = () => {
     from: '',
     to: ''
   });
-  const [filteredData, setFilteredData] = useState(null);
+
   const [notFoundMessage, setNotFoundMessage] = useState("");
 
   // Categorías
   const [categories, setCategories] = useState([]);
   const [editingCategory, setEditingCategory] = useState(null);
   const [newCategoryName, setNewCategoryName] = useState("");
-
+  const [newCategoryType, setNewCategoryType] = useState("gasto");
+  const [editingCategoryType, setEditingCategoryType] = useState("gasto");
+  const [currentType, setCurrentType] = useState('gasto');
 
 
   // Calculamos el primer día del mes seleccionado y el siguiente
@@ -92,26 +97,18 @@ const Dashboard = () => {
 
   const balance = totalIncome - totalExpenses;
 
-  const chartData = [
-  { name: "Ingresos", value: totalIncome },
-  { name: "Gastos", value: totalExpenses }
-  ];
+  const fetchCategoriesByType = async (type) => {
+  const token = localStorage.getItem("token");
+  if (!token) return;
 
-  const barChartData = [
-  { name: "Ingresos", amount: totalIncome },
-  { name: "Gastos", amount: totalExpenses },
-  { name: "Balance", amount: balance }
-  ];
-
-  const fetchCategories = async (token) => {
-    try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const response = await axios.get(`${BASE_URL}/api/Categories`, config);
-      setCategories(response.data);
-    } catch (error) {
-      console.error("Error al obtener categorías:", error);
-    }
-  };
+  try {
+    const config = { headers: { Authorization: `Bearer ${token}` } };
+    const res = await axios.get(`${BASE_URL}/api/Categories/by-type/${type}`, config);
+    setCategories(res.data);
+  } catch (error) {
+    console.error("Error al cargar categorías por tipo:", error);
+  }
+};
 
   const handleCreateCategory = async (e) => {
     e.preventDefault();
@@ -119,9 +116,14 @@ const Dashboard = () => {
     if (!token || !newCategoryName) return;
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      await axios.post(`${BASE_URL}/api/Categories`, { name: newCategoryName }, config);
+      await axios.post(
+        `${BASE_URL}/api/Categories`,
+        { name: newCategoryName, type: newCategoryType },
+        config
+      );
+
       setNewCategoryName("");
-      fetchCategories(token);
+      fetchCategoriesByType(currentType);
     } catch (err) {
   //console.error("Error al crear categoría:", err);
 
@@ -159,7 +161,7 @@ const Dashboard = () => {
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
       await axios.delete(`${BASE_URL}/api/Categories/${id}`, config);
-      fetchCategories(token);
+      fetchCategoriesByType(currentType);
     } catch (err) {
     //console.error("Error al eliminar categoría:", err);
 
@@ -191,11 +193,15 @@ const Dashboard = () => {
 
       const body = {
         id: category.id,
-        name: category.name  // el nuevo nombre
+        name: category.name,  // el nuevo nombre
+        type: category.type || currentType
       };
 
+       console.log("Editando categoría:", body);
+
       await axios.put(`${BASE_URL}/api/Categories/${category.id}`, body, config);
-      fetchCategories(token);
+      fetchCategoriesByType(body.type);
+
     } catch (error) {
       //console.error("Error al crear/editar categoría:", error);
 
@@ -478,6 +484,12 @@ const Dashboard = () => {
     });
   };
 
+  // Pie chart data
+  const chartData = [
+  { name: "Ingresos", value: totalIncome },
+  { name: "Gastos", value: totalExpenses }
+  ];
+      
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -547,15 +559,15 @@ const Dashboard = () => {
                 Torta
               </button>
               <button
-                onClick={() => setChartView('bar')}
+                onClick={() => setChartView('temporal')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
-                  chartView === 'bar'
+                  chartView === 'temporal'
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white'
                 }`}
               >
                 <BarChart3 className="w-4 h-4" />
-                Barras
+                Temporal
               </button>
             </div>
 
@@ -703,109 +715,48 @@ const Dashboard = () => {
             </div>
           )}
 
-          {chartView === 'bar' && (
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
-            <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center dark:text-white">Comparación de Ingresos, Gastos y Balance</h3>
-            <div className="flex flex-col lg:flex-row items-center gap-8 w-full">
-
-              <div className="flex-1 w-full dark:text-white" style={{ minHeight: '400px' }}>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={barChartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name"
-                    tick={{ fill: 'currentColor' }}
-              axisLine={{ stroke: 'currentColor' }}
-              tickLine={{ stroke: 'currentColor' }}
-              className="dark:text-white" />
-                    <YAxis
-  width={70}
-  tick={{ fill: 'currentColor' }}
-              axisLine={{ stroke: 'currentColor' }}
-              tickLine={{ stroke: 'currentColor' }}
-              className="dark:text-white"
-  tickFormatter={(value) => {
-    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1)}M`;
-    if (value >= 1_000) return `${(value / 1_000).toFixed(0)}k`;
-    return `$${value}`;
-  }}
-/>
-
-                    <Tooltip formatter={(value) => formatCurrency(value)} />
-                    <Legend />
-                    <Bar dataKey="amount" name="Monto" radius={[4, 4, 0, 0]}>
-                      {barChartData.map((entry, index) => {
-                        let color = '#6B7280'; // Color por defecto
-                        if (entry.name === 'Ingresos') color = '#10B981';
-                        else if (entry.name === 'Gastos') color = '#EF4444';
-                        else if (entry.name === 'Balance') color = '#3B82F6';
-                        
-                        return <Cell key={`cell-${index}`} fill={color} />;
-                      })}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-                
-              <div className="flex flex-col gap-4 lg:w-80">
-                <div className="bg-green-50 p-4 rounded-lg border-l-4 border-green-500 dark:bg-gray-700">
-                  <p className="text-gray-600 text-sm font-medium dark:text-white">Total Ingresos</p>
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
-                  <p className="text-xs text-gray-500 mt-1 dark:text-white">Dinero que entra</p>
-                </div>
-                <div className="bg-red-50 p-4 rounded-lg border-l-4 border-red-500 dark:bg-gray-700">
-                  <p className="text-gray-600 text-sm font-medium dark:text-white">Total Gastos</p>
-                  <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
-                  <p className="text-xs text-gray-500 mt-1  dark:text-white">Dinero que sale</p>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg border-l-4 border-blue-500 dark:bg-gray-700">
-                  <p className="text-gray-600 text-sm font-medium dark:text-white">Balance</p>
-                  <p className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                    {formatCurrency(balance)}
-                  </p>
-                  <p className="text-xs text-gray-500 mt-1  dark:text-white">
-                    {balance >= 0 ? 'Saldo positivo' : 'Saldo negativo'}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
+          {chartView === 'temporal' && (
+            <TimeSeriesChart />
           )}
+
         </div>
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-  <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-white">
-    Transacciones Recientes
-  </h2>
-  
-  <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 w-full sm:w-auto">
-    {/* Botón Gastos */}
-    <button
-      onClick={() => navigate('/expenses')}
-      className="bg-gradient-to-r from-red-500 to-red-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
-    >
-      <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
-      <span>Gastos</span>
-    </button>
-    
-    {/* Botón Ingresos */}
-    <button
-      onClick={() => navigate('/incomes')}
-      className="bg-gradient-to-r from-green-500 to-green-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
-    >
-      <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
-      <span>Ingresos</span>
-    </button>
-    
-    {/* Botón Nueva Transacción - Ocupa toda la fila en móvil */}
-    <button
-      onClick={() => setShowModal(true)}
-      className="col-span-2 sm:col-span-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
-    >
-      <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
-      <span>Nueva Transacción</span>
-    </button>
-  </div>
-</div>
+          <h2 className="text-xl sm:text-2xl font-semibold text-gray-800 dark:text-white">
+            Transacciones Recientes
+          </h2>
+          
+          <div className="grid grid-cols-2 sm:flex gap-2 sm:gap-3 w-full sm:w-auto">
+            {/* Botón Gastos */}
+            <button
+              onClick={() => navigate('/expenses')}
+              className="bg-gradient-to-r from-red-500 to-red-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
+            >
+              <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Gastos</span>
+            </button>
+            
+            {/* Botón Ingresos */}
+            <button
+              onClick={() => navigate('/incomes')}
+              className="bg-gradient-to-r from-green-500 to-green-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
+            >
+              <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Ingresos</span>
+            </button>
+            
+            {/* Botón Nueva Transacción - Ocupa toda la fila en móvil */}
+            <button
+              onClick={() => setShowModal(true)}
+              className="col-span-2 sm:col-span-1 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-3 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-1 sm:gap-2 shadow-lg text-xs sm:text-base min-h-[44px]"
+            >
+              <Plus className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Nueva Transacción</span>
+            </button>
+          </div>
+        </div>
+
         {/* Transactions Table */}
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg overflow-hidden">
           <div className="overflow-x-auto w-full">
@@ -887,13 +838,16 @@ const Dashboard = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Tipo</label>
                     <select
                       value={formData.type}
-                      onChange={(e) => setFormData({...formData, type: e.target.value, category: ''})}
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      required
+                      onChange={(e) => {
+                        const newType = e.target.value;
+                        setFormData({ ...formData, type: newType, categoryId: '' });
+                        fetchCategoriesByType(newType);
+                      }}
                     >
                       <option value="ingreso">Ingreso</option>
                       <option value="gasto">Gasto</option>
                     </select>
+
                   </div>
 
                   <div>
@@ -1043,22 +997,221 @@ const Dashboard = () => {
               </div>
 
                 <div className="p-3 sm:p-6 overflow-y-auto max-h-[60vh] sm:max-h-[70vh]">
+                  
+                  {/* Contenido del Panel */}
+                  {adminView === 'summary' && (
+                    <div className="space-y-6">
+                      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-end">
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID</label>
+                          <input
+                            type="number"
+                            value={summaryUserId}
+                            onChange={(e) => setSummaryUserId(e.target.value)}
+                            className="w-full p-2 sm:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
+                            placeholder="Ej: 7"
+                          />
+                        </div>
+                        <button
+                          onClick={() => fetchSummary(summaryUserId)}
+                          disabled={loading}
+                          className="bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto"
+                        >
+                          {loading ? 'Cargando...' : 'Obtener Resumen'}
+                        </button>
+                      </div>
+
+                      {notFoundMessage && (
+                        <p className="text-red-600 text-sm font-medium mt-2 ml-1">
+                          {notFoundMessage}
+                        </p>
+                      )}
+
+
+                      {summaryData && (
+                        <div className="bg-gray-50 rounded-lg p-4">
+                          <h5 className="font-semibold text-gray-800 mb-3">Resultados:</h5>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-green-500">
+                              <p className="text-sm text-gray-600 dark:text-white">Total Ingresos</p>
+                              <p className="text-xl font-bold text-green-600">{formatCurrency(summaryData.totalIncome)}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-red-500">
+                              <p className="text-sm text-gray-600 dark:text-white">Total Gastos</p>
+                              <p className="text-xl font-bold text-red-600">{formatCurrency(summaryData.totalExpenses)}</p>
+                            </div>
+                            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-blue-500">
+                              <p className="text-sm text-gray-600 dark:text-white">Balance</p>
+                              <p className={`text-xl font-bold ${summaryData.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                                {formatCurrency(summaryData.balance)}
+                              </p>
+                            </div>
+                          </div>
+                      
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {adminView === 'filter' && (
+                    <div className="space-y-6">
+                      <h4 className="text-lg font-semibold text-gray-800 dark:text-white">Filtrar Ingresos</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID *</label>
+                        <input
+                          type="number"
+                          value={filterParams.userId}
+                          onChange={(e) => setFilterParams({...filterParams, userId: e.target.value})}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Ej: 7"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
+                          Categoría
+                        </label>
+                        <select
+                          value={filterParams.categoryId ?? ""}
+                          onChange={e =>
+                            setFilterParams({
+                              ...filterParams,
+                              // si el valor es cadena vacía, lo dejamos sin valor; 
+                              // si no, lo parseamos a entero
+                              categoryId: e.target.value
+                                ? parseInt(e.target.value, 10)
+                                : undefined
+                            })
+                          }
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        >
+                          <option value="">Seleccionar categoría</option>
+                          {categories.map(cat => (
+                            <option key={cat.id} value={cat.id}>
+                              {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Fecha Desde</label>
+                        <input
+                          type="datetime-local"
+                          value={filterParams.from}
+                          onChange={(e) => setFilterParams({...filterParams, from: e.target.value})}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Fecha Hasta</label>
+                        <input
+                          type="datetime-local"
+                          value={filterParams.to}
+                          onChange={(e) => setFilterParams({...filterParams, to: e.target.value})}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+
+                      {notFoundMessage && adminView === 'filter' && (
+                        <p className="text-red-600 text-sm font-medium mt-2 ml-4">{notFoundMessage}</p>
+                      )}
+
+                    </div>
+
+                    <button
+                      onClick={fetchFilteredData}
+                      disabled={loading}
+                      className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                      {loading ? 'Cargando...' : 'Aplicar Filtros'}
+                    </button>
+
+                    {filteredData && (
+                      <div className="bg-gray-50 rounded-lg p-4">
+                        <h5 className="font-semibold text-gray-800 mb-3">Resultados ({filteredData.length} registros):</h5>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="bg-gray-200">
+                              <tr>
+                                <th className="px-3 py-2 text-left">ID</th>
+                                <th className="px-3 py-2 text-left">Monto</th>
+                                <th className="px-3 py-2 text-left">Descripción</th>
+                                <th className="px-3 py-2 text-left">Fecha</th>
+                                <th className="px-3 py-2 text-left">Categoría</th>
+                                <th className="px-3 py-2 text-left">Usuario</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                              {filteredData.map((item) => (
+                                <tr key={item.id} className="hover:bg-gray-100">
+                                  <td className="px-3 py-2">{item.id}</td>
+                                  <td className="px-3 py-2 font-semibold text-green-600">{formatCurrency(item.amount)}</td>
+                                  <td className="px-3 py-2">{item.description}</td>
+                                  <td className="px-3 py-2">{new Date(item.date).toLocaleDateString('es-AR')}</td>
+                                  <td className="px-3 py-2">{item.categoryName}</td>
+                                  <td className="px-3 py-2">{item.username} (ID: {item.userId})</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                    
+                      </div>
+                    )}
+                    </div>
+                  )}
+
                   {adminView === 'categories' && (
                     <div className="space-y-6">
-                      <h4 className="text-lg font-semibold text-gray-800">Categorías</h4>
+                      <h4 className="text-lg font-semibold text-gray-800">
+                        Categorías de {currentType === "gasto" ? "Gastos" : "Ingresos"}
+                      </h4>
+
+                      <div className="flex items-center gap-4">
+                        <label className="text-sm font-medium text-gray-700">Tipo:</label>
+                        <select
+                          value={currentType}
+                          onChange={(e) => {
+                            setCurrentType(e.target.value);
+                            fetchCategoriesByType(e.target.value);
+                          }}
+                          className="border rounded p-2"
+                        >
+                          <option value="gasto">Gasto</option>
+                          <option value="ingreso">Ingreso</option>
+                        </select>
+                      </div>
+
                       <ul className="space-y-2">
                         {categories.map((cat) => (
                           <li key={cat.id} className="flex flex-col sm:flex-row sm:justify-between sm:items-center bg-gray-100 p-3 rounded gap-2">
                             {editingCategory?.id === cat.id ? (
+                              <div className="flex flex-col sm:flex-row gap-2 w-full">
                               <input
                                 type="text"
                                 value={newCategoryName}
                                 onChange={(e) => setNewCategoryName(e.target.value)}
-                                className="border rounded p-2 flex-1 min-w-0"
+                                className="border rounded p-2 flex-1"
                               />
-                            ) : (
+                              <select
+                                value={editingCategoryType || "gasto"} // fallback si está null
+                                onChange={(e) => setEditingCategoryType(e.target.value)}
+                                className="border rounded p-2 w-36"
+                              >
+                                <option value="ingreso">Ingreso</option>
+                                <option value="gasto">Gasto</option>
+                              </select>
+
+                            </div>
+                          ) : (
+                            <div className="flex flex-col">
                               <span>{cat.name}</span>
-                            )}
+                              <span className="text-xs text-gray-500">({cat.type})</span>
+                            </div>
+                          )}
+
 
                             <div className="flex gap-2 flex-shrink-0">
                               {editingCategory?.id === cat.id ? (
@@ -1066,7 +1219,12 @@ const Dashboard = () => {
                                   <button
                                     onClick={() => {
                                       
-                                      handleEditCategory({ id: cat.id, name: newCategoryName });
+                                      handleEditCategory({
+                                        id: cat.id,
+                                        name: newCategoryName,
+                                        type: editingCategoryType
+                                      });
+
                                       setEditingCategory(null);
                                     }}
                                     disabled={!newCategoryName.trim()}
@@ -1086,202 +1244,54 @@ const Dashboard = () => {
                                   onClick={() => {
                                     setEditingCategory(cat);
                                     setNewCategoryName(cat.name);
+                                    setEditingCategoryType(cat.type);
                                   }}
                                   className="text-blue-600 hover:text-blue-800 px-3 py-1 rounded"
                                 >
                                   Editar
                                 </button>
                               )}
-                              <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-600">Eliminar</button>
+                              <button
+                                onClick={() => setConfirmDelete({ show: true, target: cat, type: "category" })}
+                                className="text-red-600"
+                              >
+                                Eliminar
+                              </button>
+
                             </div>
                           </li>
                         ))}
                       </ul>
 
 
-                      <form onSubmit={handleCreateCategory} className="flex gap-4 items-center mt-4">
-                        <input
-                          type="text"
-                          value={newCategoryName}
-                          onChange={(e) => setNewCategoryName(e.target.value)}
-                          placeholder="Nueva categoría"
-                          className="flex-1 p-3 border rounded"
-                        />
-                        <button
-                          type="submit"
-                          disabled={!newCategoryName.trim()}
-                          className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
-                        >
-                          Crear
-                        </button>
-                      </form>
-                    </div>
-                  )}
-
-              {/* Contenido del Panel */}
-                {adminView === 'summary' && (
-                  <div className="space-y-6">
-                    <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 sm:items-end">
-                      <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID</label>
-                        <input
-                          type="number"
-                          value={summaryUserId}
-                          onChange={(e) => setSummaryUserId(e.target.value)}
-                          className="w-full p-2 sm:p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm sm:text-base"
-                          placeholder="Ej: 7"
-                        />
-                      </div>
-                      <button
-                        onClick={() => fetchSummary(summaryUserId)}
-                        disabled={loading}
-                        className="bg-blue-600 text-white px-4 sm:px-6 py-2 sm:py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm sm:text-base w-full sm:w-auto"
-                      >
-                        {loading ? 'Cargando...' : 'Obtener Resumen'}
-                      </button>
-                    </div>
-
-                    {notFoundMessage && (
-                      <p className="text-red-600 text-sm font-medium mt-2 ml-1">
-                        {notFoundMessage}
-                      </p>
-                    )}
-
-
-                    {summaryData && (
-                      <div className="bg-gray-50 rounded-lg p-4">
-                        <h5 className="font-semibold text-gray-800 mb-3">Resultados:</h5>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-green-500">
-                            <p className="text-sm text-gray-600 dark:text-white">Total Ingresos</p>
-                            <p className="text-xl font-bold text-green-600">{formatCurrency(summaryData.totalIncome)}</p>
-                          </div>
-                          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-red-500">
-                            <p className="text-sm text-gray-600 dark:text-white">Total Gastos</p>
-                            <p className="text-xl font-bold text-red-600">{formatCurrency(summaryData.totalExpenses)}</p>
-                          </div>
-                          <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border-l-4 border-blue-500">
-                            <p className="text-sm text-gray-600 dark:text-white">Balance</p>
-                            <p className={`text-xl font-bold ${summaryData.balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                              {formatCurrency(summaryData.balance)}
-                            </p>
-                          </div>
-                        </div>
-                    
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {adminView === 'filter' && (
-                  <div className="space-y-6">
-                    <h4 className="text-lg font-semibold text-gray-800 dark:text-white">Filtrar Ingresos</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">User ID *</label>
+                      <form onSubmit={handleCreateCategory} className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-center mt-4">
                       <input
-                        type="number"
-                        value={filterParams.userId}
-                        onChange={(e) => setFilterParams({...filterParams, userId: e.target.value})}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Ej: 7"
+                        type="text"
+                        value={newCategoryName}
+                        onChange={(e) => setNewCategoryName(e.target.value)}
+                        placeholder="Nueva categoría"
+                        className="p-3 border rounded col-span-2"
                       />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">
-                        Categoría
-                      </label>
                       <select
-                        value={filterParams.categoryId ?? ""}
-                        onChange={e =>
-                          setFilterParams({
-                            ...filterParams,
-                            // si el valor es cadena vacía, lo dejamos sin valor; 
-                            // si no, lo parseamos a entero
-                            categoryId: e.target.value
-                              ? parseInt(e.target.value, 10)
-                              : undefined
-                          })
-                        }
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={newCategoryType}
+                        onChange={(e) => setNewCategoryType(e.target.value)}
+                        className="p-3 border rounded"
                       >
-                        <option value="">Seleccionar categoría</option>
-                        {categories.map(cat => (
-                          <option key={cat.id} value={cat.id}>
-                            {cat.name}
-                          </option>
-                        ))}
+                        <option value="ingreso">Ingreso</option>
+                        <option value="gasto">Gasto</option>
                       </select>
-                    </div>
+                      <button
+                        type="submit"
+                        disabled={!newCategoryName.trim()}
+                        className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50 col-span-1 sm:col-span-3"
+                      >
+                        Crear
+                      </button>
+                    </form>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Fecha Desde</label>
-                      <input
-                        type="datetime-local"
-                        value={filterParams.from}
-                        onChange={(e) => setFilterParams({...filterParams, from: e.target.value})}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-white mb-1">Fecha Hasta</label>
-                      <input
-                        type="datetime-local"
-                        value={filterParams.to}
-                        onChange={(e) => setFilterParams({...filterParams, to: e.target.value})}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
-                    </div>
-
-                    {notFoundMessage && adminView === 'filter' && (
-                      <p className="text-red-600 text-sm font-medium mt-2 ml-4">{notFoundMessage}</p>
-                    )}
-
-                  </div>
-
-                  <button
-                    onClick={fetchFilteredData}
-                    disabled={loading}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-                  >
-                    {loading ? 'Cargando...' : 'Aplicar Filtros'}
-                  </button>
-
-                  {filteredData && (
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h5 className="font-semibold text-gray-800 mb-3">Resultados ({filteredData.length} registros):</h5>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="bg-gray-200">
-                            <tr>
-                              <th className="px-3 py-2 text-left">ID</th>
-                              <th className="px-3 py-2 text-left">Monto</th>
-                              <th className="px-3 py-2 text-left">Descripción</th>
-                              <th className="px-3 py-2 text-left">Fecha</th>
-                              <th className="px-3 py-2 text-left">Categoría</th>
-                              <th className="px-3 py-2 text-left">Usuario</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-200">
-                            {filteredData.map((item) => (
-                              <tr key={item.id} className="hover:bg-gray-100">
-                                <td className="px-3 py-2">{item.id}</td>
-                                <td className="px-3 py-2 font-semibold text-green-600">{formatCurrency(item.amount)}</td>
-                                <td className="px-3 py-2">{item.description}</td>
-                                <td className="px-3 py-2">{new Date(item.date).toLocaleDateString('es-AR')}</td>
-                                <td className="px-3 py-2">{item.categoryName}</td>
-                                <td className="px-3 py-2">{item.username} (ID: {item.userId})</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                  
                     </div>
                   )}
-                  </div>
-                )}
+
               </div>
             </div>
           </div>
@@ -1296,30 +1306,39 @@ const Dashboard = () => {
         {/* Modal de ConfirmDeleteModal */}
         {confirmDelete.show && (
           <ConfirmDeleteModal
-            message={`¿Estás seguro de eliminar esta transacción de ${formatCurrency(confirmDelete.transaction.amount)}?`}
-            onCancel={() => setConfirmDelete({ show: false, transaction: null })}
+            message={
+              confirmDelete.type === "transaction"
+                ? `¿Estás seguro de eliminar esta transacción de ${formatCurrency(confirmDelete.target.amount)}?`
+                : `¿Estás seguro de eliminar la categoría "${confirmDelete.target.name}"?`
+            }
+            onCancel={() => setConfirmDelete({ show: false, target: null, type: null })}
             onConfirm={async () => {
               const token = localStorage.getItem("token");
-              const transaction = confirmDelete.transaction;
-              if (!token || !transaction) return;
+              const item = confirmDelete.target;
+              if (!token || !item) return;
 
               try {
                 const config = { headers: { Authorization: `Bearer ${token}` } };
-                const base = transaction.type === "ingreso" ? "Incomes" : "Expenses";
 
-                await axios.delete(`${BASE_URL}/api/${base}/${transaction.id}`, config);
+                if (confirmDelete.type === "transaction") {
+                  const base = item.type === "ingreso" ? "Incomes" : "Expenses";
+                  await axios.delete(`${BASE_URL}/api/${base}/${item.id}`, config);
+                  setTransactions(prev => prev.filter(t => t.id !== item.id));
+                } else if (confirmDelete.type === "category") {
+                  await axios.delete(`${BASE_URL}/api/Categories/${item.id}`, config);
+                  fetchCategoriesByType(currentType); // 👈 actualiza después de borrar
+                }
 
-                setTransactions(prev => prev.filter(t => t.id !== transaction.id));
                 setShowSuccess(true);
               } catch (err) {
-                //console.error("Error eliminando transacción:", err);
                 setShowError(true);
               } finally {
-                setConfirmDelete({ show: false, transaction: null });
+                setConfirmDelete({ show: false, target: null, type: null });
               }
             }}
           />
         )}
+
         {/* Modal de ErrorModal */}
         {showError && (
           <ErrorModal message={errorMessage} onClose={() => setShowError(false)} />

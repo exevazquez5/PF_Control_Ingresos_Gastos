@@ -20,7 +20,7 @@ public class CategoryService : ICategoryService
             .ToListAsync();
     }
 
-    public async Task<Category> GetByIdAsync(int id)
+    public async Task<Category?> GetByIdAsync(int id)
     {
         return await _context.Categories
             .Include(c => c.Expenses)
@@ -51,6 +51,7 @@ public class CategoryService : ICategoryService
         if (existing == null) return false;
 
         existing.Name = category.Name;
+        existing.Type = category.Type;
         await _context.SaveChangesAsync();
 
         return true;
