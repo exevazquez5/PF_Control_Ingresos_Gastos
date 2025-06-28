@@ -73,4 +73,19 @@ public class ExpenseService : IExpenseService
         await _context.SaveChangesAsync();
         return true;
     }
+
+    public async Task<decimal> CalcularMontoPagado(int expenseId)
+    {
+        var tieneCuotas = await _context.PagosCuotas.AnyAsync(pc => pc.ExpenseId == expenseId);
+
+        if (!tieneCuotas)
+        {
+            var gasto = await _context.Expenses.FirstOrDefaultAsync(e => e.Id == expenseId);
+            return gasto?.Amount ?? 0;
+        }
+
+        return await _context.PagosCuotas
+            .Where(pc => pc.ExpenseId == expenseId && pc.Estado == "pagada")
+            .SumAsync(pc => pc.MontoCuota);
+    }
 }

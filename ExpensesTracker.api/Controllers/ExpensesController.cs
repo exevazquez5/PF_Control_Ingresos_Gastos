@@ -1,4 +1,5 @@
-﻿using ExpensesTracker.api.Dtos.Expense;
+﻿using ExpensesTracker.api.Data;
+using ExpensesTracker.api.Dtos.Expense;
 using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -13,11 +14,16 @@ public class ExpensesController : ControllerBase
 {
     private readonly IExpenseService _expenseService;
     private readonly ICategoryService _categoryService;
+    private readonly AppDbContext _context;
 
-    public ExpensesController(IExpenseService expenseService, ICategoryService categoryService)
+    public bool TieneCuotas { get; private set; }
+
+    public ExpensesController(IExpenseService expenseService, ICategoryService categoryService, AppDbContext context)
     {
         _expenseService = expenseService;
         _categoryService = categoryService;
+        _context = context;
+
     }
 
     [Authorize]
@@ -35,7 +41,6 @@ public class ExpensesController : ControllerBase
         {
             return Unauthorized("Token inválido: el claim 'nameidentifier' no es un entero válido.");
         }
-
         // Verificar si tiene el rol Admin
         var isAdmin = User.IsInRole("Admin");
 
@@ -45,17 +50,26 @@ public class ExpensesController : ControllerBase
             : await _expenseService.GetByUserId(userId);
 
         // Mapear a DTO
-        var expenseDtos = expenses.Select(e => new ExpenseDto
+        var expenseDtos = new List<ExpenseDto>();
+
+        foreach (var e in expenses)
         {
-            Id = e.Id,
-            Amount = e.Amount,
-            Description = e.Description,
-            Date = e.Date,
-            CategoryId = e.CategoryId,
-            CategoryName = e.Category?.Name ?? "N/A",
-            UserId = e.UserId,
-            Username = e.User?.Username ?? "N/A"
-        }).ToList();
+            var montoPagado = await _expenseService.CalcularMontoPagado(e.Id);
+            var tieneCuotas = await _context.PagosCuotas.AnyAsync(pc => pc.ExpenseId == e.Id);
+
+            expenseDtos.Add(new ExpenseDto
+            {
+                Id = e.Id,
+                Amount = montoPagado, // ✅ Monto pagado real
+                Description = e.Description,
+                Date = e.Date,
+                CategoryId = e.CategoryId,
+                CategoryName = e.Category?.Name ?? "N/A",
+                UserId = e.UserId,
+                Username = e.User?.Username ?? "N/A",
+                TieneCuotas= tieneCuotas
+            });
+        }
 
         return Ok(expenseDtos);
     }
@@ -243,5 +257,129 @@ public class ExpensesController : ControllerBase
 
         return NoContent();
     }
+
+    [Authorize]
+    [HttpPost("with-installments")]
+    public async Task<IActionResult> CreateExpenseWithInstallments([FromBody] GastoConCuotasDto dto)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        if (dto.Amount <= 0)
+            return BadRequest("El monto debe ser mayor a cero.");
+
+        if (dto.Cuotas <= 0)
+            return BadRequest("La cantidad de cuotas debe ser mayor a cero.");
+
+        if (dto.FechaInicio > DateTime.Now)
+            return BadRequest("La fecha de inicio no puede ser futura.");
+
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+            return Unauthorized("Token inválido.");
+
+        var category = await _categoryService.GetByIdAsync(dto.CategoryId);
+        if (category == null)
+            return BadRequest($"La categoría con id {dto.CategoryId} no existe.");
+
+        var gasto = new Expense
+        {
+            Amount = dto.Amount,
+            Description = dto.Description,
+            Date = dto.FechaInicio,
+            CategoryId = dto.CategoryId,
+            UserId = userId
+        };
+
+        _context.Expenses.Add(gasto);
+        await _context.SaveChangesAsync();
+
+        decimal montoPorCuota = Math.Round(dto.Amount / dto.Cuotas, 2);
+
+        for (int i = 0; i < dto.Cuotas; i++)
+        {
+            var cuota = new PagoCuota
+            {
+                ExpenseId = gasto.Id,
+                NroCuota = i + 1,
+                MontoCuota = montoPorCuota,
+                FechaPago = dto.FechaInicio.AddMonths(i),
+                Estado = "pendiente"
+            };
+            _context.PagosCuotas.Add(cuota);
+        }
+
+        await _context.SaveChangesAsync();
+
+        // Crear el DTO para devolver
+        var expenseDto = new ExpenseDto
+        {
+            Id = gasto.Id,
+            Amount = gasto.Amount,
+            Description = gasto.Description,
+            Date = gasto.Date,
+            CategoryId = gasto.CategoryId,
+            CategoryName = category.Name,
+            UserId = gasto.UserId,
+            Username = "NoDisponible" // si no estás trayendo el user desde DB
+        };
+
+        return CreatedAtAction(nameof(GetById), new { id = gasto.Id }, expenseDto);
+    }
+
+
+    [HttpGet("cuotas/{userId}/{anio}/{mes}")]
+    public async Task<IActionResult> GetCuotasDelMes(int userId, int anio, int mes)
+    {
+        var cuotas = await _context.PagosCuotas
+            .Include(pc => pc.Expense)
+            .Where(pc => pc.Expense.UserId == userId && pc.FechaPago.Month == mes && pc.FechaPago.Year == anio)
+            .ToListAsync();
+
+        return Ok(cuotas);
+    }
+
+    [Authorize]
+    [HttpPut("cuotas/{id}/pagar")]
+    public async Task<IActionResult> MarcarCuotaPagada(int id)
+    {
+        var cuota = await _context.PagosCuotas.FindAsync(id);
+        if (cuota == null)
+            return NotFound();
+
+        cuota.Estado = "pagada";
+        await _context.SaveChangesAsync();
+
+        return Ok();
+    }
+
+    [HttpGet("cuotas/pagadas/{userId}/{anio}/{mes}")]
+    public async Task<IActionResult> GetCuotasPagadasDelMes(int userId, int anio, int mes)
+    {
+        var cuotas = await _context.PagosCuotas
+            .Include(pc => pc.Expense)
+                .ThenInclude(e => e.Category)
+            .Where(pc =>
+                pc.Expense.UserId == userId &&
+                pc.FechaPago.Month == mes &&
+                pc.FechaPago.Year == anio &&
+                pc.Estado == "pagada"
+            )
+            .Select(pc => new CuotaPagadaDto
+            {
+                Id = pc.Id,
+                MontoCuota = pc.MontoCuota,
+                FechaPago = pc.FechaPago,
+                Estado = pc.Estado,
+                ExpenseDescription = pc.Expense.Description,
+                ExpenseCategoryId = pc.Expense.CategoryId,
+                ExpenseCategoryNombre = pc.Expense.Category.Name
+            })
+            .ToListAsync();
+
+        return Ok(cuotas);
+    }
+
+
 
 }
