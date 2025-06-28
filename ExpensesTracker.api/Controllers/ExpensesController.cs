@@ -373,7 +373,8 @@ public class ExpensesController : ControllerBase
                 Estado = pc.Estado,
                 ExpenseDescription = pc.Expense.Description,
                 ExpenseCategoryId = pc.Expense.CategoryId,
-                ExpenseCategoryNombre = pc.Expense.Category.Name
+                ExpenseCategoryNombre = pc.Expense.Category.Name,
+                ExpenseId = pc.ExpenseId
             })
             .ToListAsync();
 

@@ -180,12 +180,13 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
     // Convertir cuotas pagadas a formato "transaction"
     return data.map((cuota) => ({
       id: cuota.id,
+      expenseId: cuota.expenseId,
       description: cuota.description,
       categoryName: cuota.categoryName,
       categoryId: cuota.categoryId ,
       amount: cuota.montoCuota,
       date: cuota.fechaPago, // ✅ Esta es la fecha real del gasto
-      type: "gasto",
+      type: "cuota",
     }));
   } catch (err) {
     console.error("Error al obtener cuotas pagadas:", err);
@@ -469,11 +470,11 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
 
       const cuotasPagadas = await fetchCuotasPagadasDelMes(token, userId, monthOffset); // o calcularlo con fechas
 
-      // Asegurate de usar type: "gasto"
       const cuotasConvertidas = cuotasPagadas.map(c => ({
         ...c,
-        type: "gasto"
+        type: "cuota" // ✅ importante para diferenciar
       }));
+
       const allTransactions = [...incomes, ...expenses, ...cuotasConvertidas];
 
       const withCategoryNames = allTransactions.map(t => ({
@@ -1494,6 +1495,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
         {showSuccess && (
           <SuccessModal message="Cambios guardados correctamente." onClose={() => setShowSuccess(false)} />
         )}
+
         {/* Modal de ConfirmDeleteModal */}
         {confirmDelete.show && confirmDelete.target && (
           <ConfirmDeleteModal
@@ -1507,25 +1509,51 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
                   : "¿Estás seguro de eliminar esta categoría?"
             }
 
-            onCancel={() => setConfirmDelete({ show: false, target: null, type: null })}
+            onCancel={() =>
+              setConfirmDelete({ show: false, target: null, type: null })
+            }
+
             onConfirm={async () => {
               const token = localStorage.getItem("token");
               const item = confirmDelete.target;
+              console.log("Deleting item:", item);
+
               if (!token || !item) return;
 
               try {
                 const config = { headers: { Authorization: `Bearer ${token}` } };
 
                 if (confirmDelete.type === "transaction") {
+                  let idToDelete;
+
+                  // Si es una cuota, usamos expenseId para eliminar el gasto completo
+                  if (item.type === "cuota" && item.expenseId) {
+                    idToDelete = item.expenseId;
+                  } else {
+                    idToDelete = item.id;
+                  }
+
                   const base = item.type === "ingreso" ? "Incomes" : "Expenses";
-                  await axios.delete(`${BASE_URL}/api/${base}/${item.id}`, config);
-                  setTransactions(prev => prev.filter(t => t.id !== item.id));
+
+                  await axios.delete(`${BASE_URL}/api/${base}/${idToDelete}`, config);
+
+                  // Filtrar transacciones del estado
+                  setTransactions(prev => {
+                    if (item.type === "cuota" && item.expenseId) {
+                      // Eliminamos todas las cuotas asociadas al mismo gasto
+                      return prev.filter(t => t.expenseId !== item.expenseId);
+                    } else {
+                      return prev.filter(t => t.id !== item.id);
+                    }
+                  });
+
                 } else if (confirmDelete.type === "category") {
                   await axios.delete(`${BASE_URL}/api/Categories/${item.id}`, config);
                   fetchCategoriesByType(currentType);
                 }
 
                 setShowSuccess(true);
+
               } catch (err) {
                 setShowError(true);
               } finally {
@@ -1534,6 +1562,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
             }}
           />
         )}
+
 
 
         {/* Modal de ErrorModal */}

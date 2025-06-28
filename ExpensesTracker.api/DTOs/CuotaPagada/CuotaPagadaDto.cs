@@ -8,4 +8,6 @@ public class CuotaPagadaDto
     public string ExpenseDescription { get; set; }
     public int ExpenseCategoryId { get; set; }
     public string ExpenseCategoryNombre { get; set; }
+
+    public int ExpenseId { get; set; }
 }
