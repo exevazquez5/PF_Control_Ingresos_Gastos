@@ -32,6 +32,13 @@ const IMPROVED_PALETTE = [
   '#D5A6BD'  // Rosa grisáceo
 ];
 
+// Lista de meses en español
+const meses = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+];
+
+
 // Función para obtener colores únicos y secuenciales
 function getDistinctColor(index) {
   return IMPROVED_PALETTE[index % IMPROVED_PALETTE.length];
@@ -49,6 +56,13 @@ export default function ExpensesDashboard() {
   const [showModal, setShowModal]       = useState(false);
   const [monthOffset, setMonthOffset]   = useState(0);
 
+  const [cuotasPendientes, setCuotasPendientes] = useState([]);
+const [resumenCuotas, setResumenCuotas] = useState({
+  cuotasPendientes: 0,
+  montoPendiente: 0,
+});
+
+
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -62,7 +76,46 @@ export default function ExpensesDashboard() {
 
     fetchCategories(token);
     fetchExpenses(token, userId);
-  }, []);
+    fetchCuotasPendientes(token, userId, monthOffset);
+}, [monthOffset, userId]);
+
+const fetchCuotasPendientes = async (token, userId, offset = 0) => {
+  const base = new Date();
+  base.setDate(1);
+  base.setHours(0, 0, 0, 0);
+  const targetDate = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+
+  const anio = targetDate.getFullYear();
+  const mes = targetDate.getMonth() + 1; // 0-based
+
+  try {
+    const response = await fetch(`${BASE_URL}/api/Expenses/cuotas/${userId}/${anio}/${mes}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await response.json();
+
+    const cuotas = data
+      .filter(cuota => cuota.estado !== "pagada") // importante para evitar que vuelvan a aparecer
+      .map((cuota) => ({
+        id: cuota.id,
+        descripcionGasto: cuota.expense.description,
+        categoria: cuota.expense.category?.nombre || 'Sin categoría',
+        nroCuota: cuota.nroCuota,
+        fechaPago: cuota.fechaPago,
+        montoCuota: cuota.montoCuota,
+      }));
+
+    const montoPendiente = cuotas.reduce((sum, c) => sum + c.montoCuota, 0);
+    setCuotasPendientes(cuotas);
+    setResumenCuotas({
+      cuotasPendientes: cuotas.length,
+      montoPendiente,
+    });
+  } catch (err) {
+    console.error('Error al obtener cuotas pendientes:', err);
+  }
+};
 
   const fetchCategories = async (token) => {
     try {
@@ -75,18 +128,34 @@ export default function ExpensesDashboard() {
   };
 
   const fetchExpenses = async (token, userId) => {
-    setLoading(true);
-    try {
-      const config = { headers: { Authorization: `Bearer ${token}` } };
-      const response = await axios.get(`${BASE_URL}/api/Expenses`, config);
-      const Expenses = response.data.map(i => ({ ...i, type: "gasto" }));
-      setTransactions(Expenses);
-    } catch (error) {
-      console.error("Error al obtener gastos:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
+  setLoading(true);
+  try {
+    const config = { headers: { Authorization: `Bearer ${token}` } };
+
+    const [resDirectos, cuotasPagadas] = await Promise.all([
+      axios.get(`${BASE_URL}/api/Expenses`, config),
+      fetchCuotasPagadasDelMes(token, userId, monthOffset)
+    ]);
+
+    const directos = resDirectos.data
+  .filter(e => e.tieneCuotas === false) // ⚠️ SOLO los gastos sin cuotas
+  .map(e => ({
+    id: e.id,
+    description: e.description,
+    amount: e.amount,
+    date: e.date,
+    categoryId: e.categoryId,
+    categoryName: e.categoryName,
+    type: "directo"
+  }));
+
+    setTransactions([...directos, ...cuotasPagadas]);
+  } catch (error) {
+    console.error("Error al obtener gastos:", error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('es-AR', {
@@ -147,68 +216,83 @@ export default function ExpensesDashboard() {
   const sortedChartData = [...chartData].sort((a, b) => b.value - a.value);
   
 
-// Variables mock para testing del componente
 
-const resumenCuotas = {
-  cuotasPendientes: 3,
-  montoPendiente: 10000, // Total acumulado de cuotas pendientes
+  const obtenerMesAnioDeCuotas = () => {
+  if (cuotasPendientes.length === 0) return { mesNombre: '', anio: '' };
+
+  const fecha = new Date(cuotasPendientes[0].fechaPago); // <-- MES REAL de la cuota
+  const mesNombre = meses[fecha.getMonth()];
+  const anio = fecha.getFullYear();
+
+  return { mesNombre, anio };
+};
+const { mesNombre, anio } = obtenerMesAnioDeCuotas();
+
+const pagarCuota = async (idCuota) => {
+  const token = localStorage.getItem("token");
+  if (!token || !userId) return;
+
+  setLoading(true);
+  try {
+    const config = { headers: { Authorization: `Bearer ${token}` } };
+
+    await axios.put(`${BASE_URL}/api/Expenses/cuotas/${idCuota}/pagar`, null, config);
+
+    await fetchCuotasPendientes(token, userId, monthOffset);
+
+    // ✅ Eliminar la cuota pagada de la lista
+    const cuotaPagada = cuotasPendientes.find(c => c.id === idCuota);
+    if (!cuotaPagada) return;
+
+    setCuotasPendientes(prev => prev.filter(c => c.id !== idCuota));
+
+    setResumenCuotas(prev => ({
+      cuotasPendientes: prev.cuotasPendientes - 1,
+      montoPendiente: prev.montoPendiente - cuotaPagada.montoCuota
+    }));
+
+    await fetchExpenses(token, userId);
+  } catch (error) {
+    console.error("Error al pagar cuota:", error);
+  } finally {
+    setLoading(false);
+  }
 };
 
-const cuotasPendientes = [
-  {
-    id: 1,
-    descripcionGasto: 'Termo eléctrico',
-    categoria: 'Electrodomésticos',
-    nroCuota: 1,
-    fechaPago: '2024-06-15T00:00:00.000Z',
-    montoCuota: 3333.33,
-  },
-  {
-    id: 2,
-    descripcionGasto: 'Notebook Lenovo',
-    categoria: 'Electrónica',
-    nroCuota: 2,
-    fechaPago: '2024-06-20T00:00:00.000Z',
-    montoCuota: 3333.33,
-  },
-  {
-    id: 3,
-    descripcionGasto: 'Silla ergonómica',
-    categoria: 'Oficina',
-    nroCuota: 1,
-    fechaPago: '2024-06-25T00:00:00.000Z',
-    montoCuota: 3333.34,
-  },
-];
 
-// Para simular el mes y año actual
-const currentMonth = new Date().getMonth(); // 0 = enero
-const currentYear = new Date().getFullYear();
+const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
+  const base = new Date();
+  base.setDate(1);
+  base.setHours(0, 0, 0, 0);
+  const targetDate = new Date(base.getFullYear(), base.getMonth() + offset, 1);
 
-// Lista de meses en español
-const meses = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
-];
+  const anio = targetDate.getFullYear();
+  const mes = targetDate.getMonth() + 1;
 
-// Función mock para formatear moneda
-const formatearMoneda = (valor) => {
-  return valor.toLocaleString('es-AR', {
-    style: 'currency',
-    currency: 'ARS',
-    minimumFractionDigits: 2,
-  });
+  try {
+    const response = await fetch(`${BASE_URL}/api/Expenses/cuotas/pagadas/${userId}/${anio}/${mes}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    // Convertir cuotas pagadas a formato "transaction"
+    return data.map((cuota) => ({
+      id: cuota.id,
+      description: cuota.description,
+      categoryName: cuota.categoryName,
+      categoryId: cuota.categoryId ,
+      amount: cuota.montoCuota,
+      date: cuota.fechaPago, // ✅ Esta es la fecha real del gasto
+      type: "cuota",
+    }));
+  } catch (err) {
+    console.error("Error al obtener cuotas pagadas:", err);
+    return [];
+  }
 };
-
-// Función mock para simular el pago de cuota
-const pagarCuota = (id) => {
-  console.log(`Pagando cuota con ID: ${id}`);
-  alert(`Cuota con ID ${id} pagada (simulado)`);
-};
-
-const cuotasTotales = 6;
-const cuotasPagadas = cuotasTotales - resumenCuotas.cuotasPendientes;
-
 
 
   return (
@@ -335,7 +419,7 @@ const cuotasPagadas = cuotasTotales - resumenCuotas.cuotasPendientes;
 
               <div className="flex-1 bg-yellow-50 border-l-4 border-yellow-500 p-4 rounded">
                 <h4 className="text-sm text-gray-600 dark:text-gray-300">Monto pendiente total</h4>
-                <p className="text-2xl font-bold text-yellow-600">{formatearMoneda(resumenCuotas.montoPendiente)}</p>
+                <p className="text-2xl font-bold text-yellow-600">{formatCurrency(resumenCuotas.montoPendiente)}</p>
               </div>
             </div>
 
@@ -343,8 +427,8 @@ const cuotasPagadas = cuotasTotales - resumenCuotas.cuotasPendientes;
             <div className="flex items-center space-x-2">
               <Clock className="w-5 h-5 text-orange-500" />
               <h4 className="text-lg font-semibold text-gray-800 dark:text-white">
-                Cuotas Pendientes - {meses[currentMonth]} {currentYear}
-              </h4>
+  Cuotas Pendientes - {selMonth.toLocaleDateString('es-AR', { year:'numeric', month:'long' })}
+</h4>
             </div>
 
             {/* Cuotas + progreso lado a lado */}
@@ -371,7 +455,7 @@ const cuotasPagadas = cuotasTotales - resumenCuotas.cuotasPendientes;
                             Cuota {cuota.nroCuota} - Vence: {new Date(cuota.fechaPago).toLocaleDateString('es-AR')}
                           </div>
                           <div className="text-lg font-semibold text-orange-600 mt-1">
-                            {formatearMoneda(cuota.montoCuota)}
+                            {formatCurrency(cuota.montoCuota)}
                           </div>
                         </div>
                         <button

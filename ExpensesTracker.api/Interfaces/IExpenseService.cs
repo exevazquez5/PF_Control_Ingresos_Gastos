@@ -10,5 +10,6 @@ namespace ExpensesTracker.api.Interfaces
         Task<Expense> CreateAsync(Expense expense);
         Task<bool> UpdateAsync(Expense expense);
         Task<bool> DeleteAsync(int id);
+        Task<decimal> CalcularMontoPagado(int expenseId);
     }
 }

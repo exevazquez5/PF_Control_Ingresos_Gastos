@@ -157,6 +157,41 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
 
   };
 
+  const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
+  const base = new Date();
+  base.setDate(1);
+  base.setHours(0, 0, 0, 0);
+  const targetDate = new Date(base.getFullYear(), base.getMonth() + offset, 1);
+
+  const anio = targetDate.getFullYear();
+  const mes = targetDate.getMonth() + 1;
+
+  try {
+    const response = await fetch(`${BASE_URL}/api/Expenses/cuotas/pagadas/${userId}/${anio}/${mes}`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    const data = await response.json();
+
+    // Convertir cuotas pagadas a formato "transaction"
+    return data.map((cuota) => ({
+      id: cuota.id,
+      description: cuota.description,
+      categoryName: cuota.categoryName,
+      categoryId: cuota.categoryId ,
+      amount: cuota.montoCuota,
+      date: cuota.fechaPago, // ✅ Esta es la fecha real del gasto
+      type: "cuota",
+    }));
+  } catch (err) {
+    console.error("Error al obtener cuotas pagadas:", err);
+    return [];
+  }
+};
+
+
   const handleDeleteCategory = async (id) => {
     const token = localStorage.getItem("token");
     if (!token) return;
@@ -243,7 +278,6 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
   const handleSubmit = async () => {
   if (
     !formData.amount ||
-    !formData.date ||
     !formData.categoryId ||
     isNaN(Number(formData.categoryId)) ||
     !formData.description
@@ -252,37 +286,69 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
     return;
   }
 
+  // Validación condicional de fecha
+  if (formData.type === "gasto" && enCuotas) {
+    // Para gastos en cuotas, validar campos específicos
+    if (!cantidadCuotas || !fechaInicioCuotas) {
+      setFormError("Completá los datos de cuotas");
+      return;
+    }
+    if (parseInt(cantidadCuotas) <= 0) {
+      setFormError("La cantidad de cuotas debe ser mayor a cero");
+      return;
+    }
+  } else {
+    // Para transacciones normales (ingresos o gastos simples), validar fecha normal
+    if (!formData.date) {
+      setFormError("Selecciona una fecha");
+      return;
+    }
+  }
+
   const token = localStorage.getItem("token");
 
   try {
     if (formData.type === "gasto" && enCuotas) {
-      // Validar campos de cuotas
-      if (!cantidadCuotas || !fechaInicioCuotas) {
-        setFormError("Completá los datos de cuotas");
-        return;
-      }
-
+      // Crear gasto con cuotas
       const body = {
         amount: parseFloat(formData.amount),
         description: formData.description,
+        fechaInicio: fechaInicioCuotas,
         categoryId: parseInt(formData.categoryId),
         cuotas: parseInt(cantidadCuotas),
-        fechaInicio: fechaInicioCuotas
+        userId: userId
       };
 
-      await axios.post("/api/expenses/with-installments", body, {
+      await axios.post(`${BASE_URL}/api/Expenses/with-installments`, body, {
         headers: { Authorization: `Bearer ${token}` }
       });
+      
+      // Mensaje específico para cuotas
+      console.log(`Gasto en ${cantidadCuotas} cuotas creado exitosamente`);
     } else {
-      // Transacción normal
-      await createTransaction(formData); // tu función existente
+      // Transacción normal (ingreso o gasto simple)
+      await createTransaction(formData);
     }
 
     resetForm();
     setFormError("");
+    
+    // Opcional: Recargar las transacciones para mostrar los cambios
+    // await loadTransactions();
+    
   } catch (error) {
     console.error(error);
-    setFormError("Ocurrió un error al guardar la transacción.");
+    console.log('Error 500:', error.response?.data || error.message);
+
+    
+    // Manejo más específico de errores
+    if (error.response?.data?.message) {
+      setFormError(error.response.data.message);
+    } else if (error.response?.data) {
+      setFormError("Error del servidor: " + JSON.stringify(error.response.data));
+    } else {
+      setFormError("Ocurrió un error al guardar la transacción.");
+    }
   }
 };
 
@@ -391,9 +457,20 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
       }
 
       const incomes = incomesRes.data.map(i => ({ ...i, type: "ingreso" }));
-      const expenses = expensesRes.data.map(e => ({ ...e, type: "gasto" }));
+      const expenses = expensesRes.data
+      .filter(e => e.tieneCuotas === false) // ✅ solo los gastos directos
+      .map(e => ({ ...e, type: "gasto" }));
 
-      const withCategoryNames = [...incomes, ...expenses].map(t => ({
+      const cuotasPagadas = await fetchCuotasPagadasDelMes(token, userId, monthOffset); // o calcularlo con fechas
+
+      // Asegurate de usar type: "gasto"
+      const cuotasConvertidas = cuotasPagadas.map(c => ({
+        ...c,
+        type: "gasto"
+      }));
+      const allTransactions = [...incomes, ...expenses, ...cuotasConvertidas];
+
+      const withCategoryNames = allTransactions.map(t => ({
         ...t,
         category: categories.find(c => c.id === t.categoryId)?.name || 'Sin categoría'
       }));
@@ -929,7 +1006,15 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
                     <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Tipo</label>
                     <select
                       value={formData.type}
-                      onChange={(e) => setFormData({...formData, type: e.target.value, category: ''})}
+                      onChange={(e) => {
+                        setFormData({...formData, type: e.target.value, category: ''});
+                        // Resetear opciones de cuotas cuando cambia el tipo
+                        if (e.target.value === 'ingreso') {
+                          setEnCuotas(false);
+                          setCantidadCuotas('');
+                          setFechaInicioCuotas('');
+                        }
+                      }}
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       required
                     >
@@ -952,47 +1037,109 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
                       ))}
                     </select>
                   </div>
+
                   {/*Monto maximo 10M */}
                   <div>
-                 <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
-                  Monto (máximo $10,000,000)
-                  </label>
-                  <input
-                     type="number"
+                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
+                      Monto (máximo $10,000,000)
+                    </label>
+                    <input
+                      type="number"
                       step="0.01"
                       min="0"
                       max="10000000"
                       value={formData.amount}
                       onChange={(e) => {
-                      const value = parseFloat(e.target.value);
-                      if (value <= 10000000 || e.target.value === '') {
-                       setFormData({...formData, amount: e.target.value});
+                        const value = parseFloat(e.target.value);
+                        if (value <= 10000000 || e.target.value === '') {
+                          setFormData({...formData, amount: e.target.value});
                         }
-                          }}
-                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                         placeholder="0.00"
-                         required
-                          />
-                          {formData.amount > 10000000 && (
-                          <p className="text-red-500 text-sm mt-1">
-                          El monto no puede exceder $10,000,000
-                        </p>
-                          )}
-                        </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Fecha</label>
-                    <input
-                      type="date"
-                      value={formData.date}
-                      onChange={(e) => setFormData({...formData, date: e.target.value})}
+                      }}
                       className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="0.00"
                       required
                     />
+                    {formData.amount > 10000000 && (
+                      <p className="text-red-500 text-sm mt-1">
+                        El monto no puede exceder $10,000,000
+                      </p>
+                    )}
                   </div>
 
+                  {/* Opción en cuotas - Solo para gastos */}
+                  {formData.type === 'gasto' && (
+                    <div>
+                      <label className="inline-flex items-center text-sm font-medium text-gray-700 dark:text-white">
+                        <input
+                          type="checkbox"
+                          checked={enCuotas}
+                          onChange={(e) => {
+                            setEnCuotas(e.target.checked);
+                            // Si se desactivan las cuotas, limpiar los campos relacionados
+                            if (!e.target.checked) {
+                              setCantidadCuotas('');
+                              setFechaInicioCuotas('');
+                            }
+                          }}
+                          className="form-checkbox h-4 w-4 text-blue-600"
+                        />
+                        <span className="ml-2">¿Este gasto es en cuotas?</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {/* Campos de cuotas - Solo si es gasto y está activado */}
+                  {formData.type === 'gasto' && enCuotas && (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
+                          Cantidad de cuotas
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          value={cantidadCuotas}
+                          onChange={(e) => setCantidadCuotas(e.target.value)}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
+                          Fecha de inicio de pago
+                        </label>
+                        <input
+                          type="date"
+                          value={fechaInicioCuotas}
+                          onChange={(e) => setFechaInicioCuotas(e.target.value)}
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Campo de fecha original - Solo si NO es gasto en cuotas */}
+                  {!(formData.type === 'gasto' && enCuotas) && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
+                        Fecha
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.date}
+                        onChange={(e) => setFormData({...formData, date: e.target.value})}
+                        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        required
+                      />
+                    </div>
+                  )}
+
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Descripción</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
+                      Descripción
+                    </label>
                     <textarea
                       value={formData.description}
                       onChange={(e) => setFormData({...formData, description: e.target.value})}
@@ -1007,48 +1154,6 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
                       {formError}
                     </div>
                   )}
-
-                  {/* Opción en cuotas */}
-<div>
-  <label className="inline-flex items-center text-sm font-medium text-gray-700 dark:text-white">
-    <input
-      type="checkbox"
-      checked={enCuotas}
-      onChange={(e) => setEnCuotas(e.target.checked)}
-      className="form-checkbox h-4 w-4 text-blue-600"
-    />
-    <span className="ml-2">¿Este gasto es en cuotas?</span>
-  </label>
-</div>
-
-{enCuotas && (
-  <>
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Cantidad de cuotas</label>
-      <input
-        type="number"
-        min="1"
-        value={cantidadCuotas}
-        onChange={(e) => setCantidadCuotas(e.target.value)}
-        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        required
-      />
-    </div>
-
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">Fecha de inicio de pago</label>
-      <input
-        type="date"
-        value={fechaInicioCuotas}
-        onChange={(e) => setFechaInicioCuotas(e.target.value)}
-        className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-        required
-      />
-    </div>
-  </>
-)}
-
-
 
                   <div className="flex gap-3 pt-4">
                     <button
@@ -1070,8 +1175,9 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
               </div>
             </div>
           </div>
-          
         )}
+          
+        
         {/* Modal del Panel de Administración */}
         {isAdmin && showAdminPanel && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

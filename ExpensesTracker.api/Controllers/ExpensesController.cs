@@ -16,11 +16,14 @@ public class ExpensesController : ControllerBase
     private readonly ICategoryService _categoryService;
     private readonly AppDbContext _context;
 
-    public ExpensesController(IExpenseService expenseService, ICategoryService categoryService, ApplDbContext context)
+    public bool TieneCuotas { get; private set; }
+
+    public ExpensesController(IExpenseService expenseService, ICategoryService categoryService, AppDbContext context)
     {
         _expenseService = expenseService;
         _categoryService = categoryService;
         _context = context;
+
     }
 
     [Authorize]
@@ -38,7 +41,6 @@ public class ExpensesController : ControllerBase
         {
             return Unauthorized("Token inválido: el claim 'nameidentifier' no es un entero válido.");
         }
-
         // Verificar si tiene el rol Admin
         var isAdmin = User.IsInRole("Admin");
 
@@ -48,17 +50,26 @@ public class ExpensesController : ControllerBase
             : await _expenseService.GetByUserId(userId);
 
         // Mapear a DTO
-        var expenseDtos = expenses.Select(e => new ExpenseDto
+        var expenseDtos = new List<ExpenseDto>();
+
+        foreach (var e in expenses)
         {
-            Id = e.Id,
-            Amount = e.Amount,
-            Description = e.Description,
-            Date = e.Date,
-            CategoryId = e.CategoryId,
-            CategoryName = e.Category?.Name ?? "N/A",
-            UserId = e.UserId,
-            Username = e.User?.Username ?? "N/A"
-        }).ToList();
+            var montoPagado = await _expenseService.CalcularMontoPagado(e.Id);
+            var tieneCuotas = await _context.PagosCuotas.AnyAsync(pc => pc.ExpenseId == e.Id);
+
+            expenseDtos.Add(new ExpenseDto
+            {
+                Id = e.Id,
+                Amount = montoPagado, // ✅ Monto pagado real
+                Description = e.Description,
+                Date = e.Date,
+                CategoryId = e.CategoryId,
+                CategoryName = e.Category?.Name ?? "N/A",
+                UserId = e.UserId,
+                Username = e.User?.Username ?? "N/A",
+                TieneCuotas= tieneCuotas
+            });
+        }
 
         return Ok(expenseDtos);
     }
@@ -300,7 +311,20 @@ public class ExpensesController : ControllerBase
 
         await _context.SaveChangesAsync();
 
-        return CreatedAtAction(nameof(GetById), new { id = gasto.Id }, gasto);
+        // Crear el DTO para devolver
+        var expenseDto = new ExpenseDto
+        {
+            Id = gasto.Id,
+            Amount = gasto.Amount,
+            Description = gasto.Description,
+            Date = gasto.Date,
+            CategoryId = gasto.CategoryId,
+            CategoryName = category.Name,
+            UserId = gasto.UserId,
+            Username = "NoDisponible" // si no estás trayendo el user desde DB
+        };
+
+        return CreatedAtAction(nameof(GetById), new { id = gasto.Id }, expenseDto);
     }
 
 
@@ -327,6 +351,33 @@ public class ExpensesController : ControllerBase
         await _context.SaveChangesAsync();
 
         return Ok();
+    }
+
+    [HttpGet("cuotas/pagadas/{userId}/{anio}/{mes}")]
+    public async Task<IActionResult> GetCuotasPagadasDelMes(int userId, int anio, int mes)
+    {
+        var cuotas = await _context.PagosCuotas
+            .Include(pc => pc.Expense)
+                .ThenInclude(e => e.Category)
+            .Where(pc =>
+                pc.Expense.UserId == userId &&
+                pc.FechaPago.Month == mes &&
+                pc.FechaPago.Year == anio &&
+                pc.Estado == "pagada"
+            )
+            .Select(pc => new CuotaPagadaDto
+            {
+                Id = pc.Id,
+                MontoCuota = pc.MontoCuota,
+                FechaPago = pc.FechaPago,
+                Estado = pc.Estado,
+                ExpenseDescription = pc.Expense.Description,
+                ExpenseCategoryId = pc.Expense.CategoryId,
+                ExpenseCategoryNombre = pc.Expense.Category.Name
+            })
+            .ToListAsync();
+
+        return Ok(cuotas);
     }
 
 
