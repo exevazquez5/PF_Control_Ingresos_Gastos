@@ -333,11 +333,26 @@ public class ExpensesController : ControllerBase
     {
         var cuotas = await _context.PagosCuotas
             .Include(pc => pc.Expense)
-            .Where(pc => pc.Expense.UserId == userId && pc.FechaPago.Month == mes && pc.FechaPago.Year == anio)
+                .ThenInclude(e => e.Category)
+            .Where(pc => pc.Expense.UserId == userId &&
+                         pc.FechaPago.Month == mes &&
+                         pc.FechaPago.Year == anio)
+            .Select(pc => new CuotaPagadaDto
+            {
+                Id = pc.Id,
+                ExpenseId = pc.ExpenseId,
+                MontoCuota = pc.MontoCuota,
+                FechaPago = pc.FechaPago,
+                Estado = pc.Estado,
+                ExpenseDescription = pc.Expense.Description,
+                ExpenseCategoryId = pc.Expense.CategoryId,
+                ExpenseCategoryNombre = pc.Expense.Category.Name
+            })
             .ToListAsync();
 
         return Ok(cuotas);
     }
+
 
     [Authorize]
     [HttpPut("cuotas/{id}/pagar")]

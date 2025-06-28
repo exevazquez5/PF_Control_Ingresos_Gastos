@@ -26,7 +26,18 @@ namespace ExpensesTracker.api.Services
                 })
                 .ToListAsync();
 
-            var expenses = await _context.Expenses
+            var cuotasPagadas = await _context.PagosCuotas
+                .Where(pc => pc.Estado == "pagada")
+                .GroupBy(pc => new { pc.FechaPago.Year, pc.FechaPago.Month })
+                .Select(g => new {
+                    g.Key.Year,
+                    g.Key.Month,
+                    Gastos = g.Sum(pc => pc.MontoCuota)
+                })
+                .ToListAsync();
+
+            var gastosDirectos = await _context.Expenses
+                .Where(e => !_context.PagosCuotas.Any(pc => pc.ExpenseId == e.Id))
                 .GroupBy(e => new { e.Date.Year, e.Date.Month })
                 .Select(g => new {
                     g.Key.Year,
@@ -35,25 +46,12 @@ namespace ExpensesTracker.api.Services
                 })
                 .ToListAsync();
 
-            // Unificamos en un tipo anónimo común
-            var incomeData = incomes
-                .Select(i => new {
-                    i.Year,
-                    i.Month,
-                    Ingresos = i.Ingresos,
-                    Gastos = 0m
-                });
+            var allData = incomes
+                .Select(i => new { i.Year, i.Month, i.Ingresos, Gastos = 0m })
+                .Concat(cuotasPagadas.Select(c => new { c.Year, c.Month, Ingresos = 0m, c.Gastos }))
+                .Concat(gastosDirectos.Select(g => new { g.Year, g.Month, Ingresos = 0m, g.Gastos }));
 
-            var expenseData = expenses
-                .Select(e => new {
-                    e.Year,
-                    e.Month,
-                    Ingresos = 0m,
-                    Gastos = e.Gastos
-                });
-
-            var result = incomeData
-                .Concat(expenseData)
+            return allData
                 .GroupBy(x => new { x.Year, x.Month })
                 .Select(g => new MonthlySummaryDto
                 {
@@ -65,12 +63,12 @@ namespace ExpensesTracker.api.Services
                 .OrderBy(x => x.Year)
                 .ThenBy(x => x.Month)
                 .ToList();
-
-            return result;
         }
+
 
         public async Task<List<MonthlySummaryDto>> GetMonthlySummaryByUserAsync(int userId)
         {
+            // Ingresos por mes
             var incomes = await _context.Incomes
                 .Where(i => i.UserId == userId)
                 .GroupBy(i => new { i.Date.Year, i.Date.Month })
@@ -81,8 +79,20 @@ namespace ExpensesTracker.api.Services
                 })
                 .ToListAsync();
 
-            var expenses = await _context.Expenses
-                .Where(e => e.UserId == userId)
+            // Cuotas pagadas por mes
+            var cuotasPagadas = await _context.PagosCuotas
+                .Where(pc => pc.Estado == "pagada" && pc.Expense.UserId == userId)
+                .GroupBy(pc => new { pc.FechaPago.Year, pc.FechaPago.Month })
+                .Select(g => new {
+                    g.Key.Year,
+                    g.Key.Month,
+                    Gastos = g.Sum(pc => pc.MontoCuota)
+                })
+                .ToListAsync();
+
+            // Gastos directos (sin cuotas) por mes
+            var gastosDirectos = await _context.Expenses
+                .Where(e => e.UserId == userId && !_context.PagosCuotas.Any(pc => pc.ExpenseId == e.Id))
                 .GroupBy(e => new { e.Date.Year, e.Date.Month })
                 .Select(g => new {
                     g.Key.Year,
@@ -91,21 +101,13 @@ namespace ExpensesTracker.api.Services
                 })
                 .ToListAsync();
 
-            var incomeData = incomes.Select(i => new {
-                i.Year,
-                i.Month,
-                Ingresos = i.Ingresos,
-                Gastos = 0m
-            });
+            // Unificar todos los datos
+            var allData = incomes
+                .Select(i => new { i.Year, i.Month, i.Ingresos, Gastos = 0m })
+                .Concat(cuotasPagadas.Select(c => new { c.Year, c.Month, Ingresos = 0m, c.Gastos }))
+                .Concat(gastosDirectos.Select(g => new { g.Year, g.Month, Ingresos = 0m, g.Gastos }));
 
-            var expenseData = expenses.Select(e => new {
-                e.Year,
-                e.Month,
-                Ingresos = 0m,
-                Gastos = e.Gastos
-            });
-
-            return incomeData.Concat(expenseData)
+            return allData
                 .GroupBy(x => new { x.Year, x.Month })
                 .Select(g => new MonthlySummaryDto
                 {
@@ -118,6 +120,7 @@ namespace ExpensesTracker.api.Services
                 .ThenBy(x => x.Month)
                 .ToList();
         }
+
 
     }
 

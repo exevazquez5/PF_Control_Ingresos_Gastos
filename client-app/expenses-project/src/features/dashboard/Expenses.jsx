@@ -97,8 +97,8 @@ const fetchCuotasPendientes = async (token, userId, offset = 0) => {
     .filter(cuota => cuota.estado !== "pagada")
     .map((cuota) => ({
       id: cuota.id,
-      descripcionGasto: cuota.expense?.description || 'Sin descripción',
-      categoria: cuota.expense?.category?.nombre || 'Sin categoría',
+      descripcionGasto: cuota.expenseDescription || 'Sin descripción',
+      categoria: cuota.expenseCategoryNombre || 'Sin categoría',
       nroCuota: cuota.nroCuota,
       fechaPago: cuota.fechaPago,
       montoCuota: cuota.montoCuota,
@@ -106,6 +106,7 @@ const fetchCuotasPendientes = async (token, userId, offset = 0) => {
       restantes: cuota.restantes ?? null,
       totalCuotas: cuota.totalCuotas ?? null,
     }));
+
 
     const montoPendiente = cuotas.reduce((sum, c) => sum + c.montoCuota, 0);
     setCuotasPendientes(cuotas);
@@ -286,13 +287,15 @@ const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
     // Convertir cuotas pagadas a formato "transaction"
     return data.map((cuota) => ({
       id: cuota.id,
-      description: cuota.description,
-      categoryName: cuota.categoryName,
-      categoryId: cuota.categoryId ,
+      expenseId: cuota.expenseId,
+      description: cuota.expenseDescription,
+      categoryName: cuota.expenseCategoryNombre,
+      categoryId: cuota.expenseCategoryId,
       amount: cuota.montoCuota,
-      date: cuota.fechaPago, // ✅ Esta es la fecha real del gasto
-      type: "cuota",
+      date: cuota.fechaPago,
+      type: "cuota"
     }));
+
   } catch (err) {
     console.error("Error al obtener cuotas pagadas:", err);
     return [];
@@ -459,6 +462,7 @@ const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
                             <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-full text-xs">
                               {cuota.categoria}
                             </span>
+
                           </div>
                           <div className="text-sm text-gray-600 dark:text-gray-300">
                             Cuota {cuota.nroCuota} - Vence: {new Date(cuota.fechaPago).toLocaleDateString('es-AR')}

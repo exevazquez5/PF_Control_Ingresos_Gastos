@@ -47,6 +47,9 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
   const [formError, setFormError] = useState('');
   const [chartView, setChartView] = useState('default');
 
+  const [allTransactions, setAllTransactions] = useState([]);
+
+
   const [filteredData, setFilteredData] = useState('');
 
   // Estado de modales
@@ -96,7 +99,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
   .reduce((sum, t) => sum + t.amount, 0);
 
   const totalExpenses = periodTransactions
-  .filter((t) => t.type === "gasto")
+  .filter((t) => t.type === "gasto" || t.type === "cuota")
   .reduce((sum, t) => sum + t.amount, 0);
 
   const balance = totalIncome - totalExpenses;
@@ -179,14 +182,14 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
 
     // Convertir cuotas pagadas a formato "transaction"
     return data.map((cuota) => ({
-      id: cuota.id,
-      expenseId: cuota.expenseId,
-      description: cuota.description,
-      categoryName: cuota.categoryName,
-      categoryId: cuota.categoryId ,
+      id: cuota.id, 
+      expenseId: cuota.expenseId, 
+      description: cuota.expenseDescription,
+      categoryId: cuota.expenseCategoryId,  
+      categoryName: cuota.expenseCategoryNombre, 
       amount: cuota.montoCuota,
-      date: cuota.fechaPago, // ✅ Esta es la fecha real del gasto
-      type: "cuota",
+      date: cuota.fechaPago,
+      type: "cuota"
     }));
   } catch (err) {
     console.error("Error al obtener cuotas pagadas:", err);
@@ -482,6 +485,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
         category: categories.find(c => c.id === t.categoryId)?.name || 'Sin categoría'
       }));
 
+      setAllTransactions(withCategoryNames);
       setTransactions(withCategoryNames);
 
     } catch (error) {
@@ -894,7 +898,11 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200">
-              {transactions.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10).map((transaction) => (
+              {allTransactions
+              .slice()
+              .sort((a, b) => new Date(b.date) - new Date(a.date))
+              .slice(0, 10)
+              .map(transaction => (
                 <tr key={`${transaction.type}-${transaction.id}`} className="hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -945,6 +953,7 @@ const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
             </table>
           </div>
         </div>
+
         {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
