@@ -174,7 +174,6 @@ public class ExpensesController : ControllerBase
     }
 
 
-
     [Authorize]
     [HttpPut("{id}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateExpenseDto dto)
@@ -337,20 +336,33 @@ public class ExpensesController : ControllerBase
             .Where(pc => pc.Expense.UserId == userId &&
                          pc.FechaPago.Month == mes &&
                          pc.FechaPago.Year == anio)
-            .Select(pc => new CuotaPagadaDto
+            .ToListAsync();
+
+        var resultado = cuotas.Select(pc =>
+        {
+            var allCuotas = _context.PagosCuotas.Where(c => c.ExpenseId == pc.ExpenseId);
+            var totalCuotas = allCuotas.Count();
+            var pagadas = allCuotas.Count(c => c.Estado == "pagada");
+            var restantes = totalCuotas - pagadas;
+
+            return new CuotaPagadaDto
             {
                 Id = pc.Id,
-                ExpenseId = pc.ExpenseId,
                 MontoCuota = pc.MontoCuota,
                 FechaPago = pc.FechaPago,
                 Estado = pc.Estado,
                 ExpenseDescription = pc.Expense.Description,
                 ExpenseCategoryId = pc.Expense.CategoryId,
-                ExpenseCategoryNombre = pc.Expense.Category.Name
-            })
-            .ToListAsync();
+                ExpenseCategoryNombre = pc.Expense.Category.Name,
+                ExpenseId = pc.ExpenseId,
 
-        return Ok(cuotas);
+                TotalCuotas = totalCuotas,
+                Pagadas = pagadas,
+                Restantes = restantes
+            };
+        }).ToList();
+
+        return Ok(resultado);
     }
 
 
@@ -371,7 +383,7 @@ public class ExpensesController : ControllerBase
     [HttpGet("cuotas/pagadas/{userId}/{anio}/{mes}")]
     public async Task<IActionResult> GetCuotasPagadasDelMes(int userId, int anio, int mes)
     {
-        var cuotas = await _context.PagosCuotas
+        var cuotasPagadas = await _context.PagosCuotas
             .Include(pc => pc.Expense)
                 .ThenInclude(e => e.Category)
             .Where(pc =>
@@ -380,7 +392,16 @@ public class ExpensesController : ControllerBase
                 pc.FechaPago.Year == anio &&
                 pc.Estado == "pagada"
             )
-            .Select(pc => new CuotaPagadaDto
+            .ToListAsync();
+
+        var resultado = cuotasPagadas.Select(pc =>
+        {
+            var allCuotas = _context.PagosCuotas.Where(c => c.ExpenseId == pc.ExpenseId);
+            var totalCuotas = allCuotas.Count();
+            var pagadas = allCuotas.Count(c => c.Estado == "pagada");
+            var restantes = totalCuotas - pagadas;
+
+            return new CuotaPagadaDto
             {
                 Id = pc.Id,
                 MontoCuota = pc.MontoCuota,
@@ -389,12 +410,18 @@ public class ExpensesController : ControllerBase
                 ExpenseDescription = pc.Expense.Description,
                 ExpenseCategoryId = pc.Expense.CategoryId,
                 ExpenseCategoryNombre = pc.Expense.Category.Name,
-                ExpenseId = pc.ExpenseId
-            })
-            .ToListAsync();
+                ExpenseId = pc.ExpenseId,
 
-        return Ok(cuotas);
+                // ✅ nuevos campos
+                TotalCuotas = totalCuotas,
+                Pagadas = pagadas,
+                Restantes = restantes
+            };
+        }).ToList();
+
+        return Ok(resultado);
     }
+
 
 
 

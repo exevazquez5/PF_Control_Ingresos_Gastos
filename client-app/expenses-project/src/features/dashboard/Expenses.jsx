@@ -289,11 +289,14 @@ const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
       id: cuota.id,
       expenseId: cuota.expenseId,
       description: cuota.expenseDescription,
-      categoryName: cuota.expenseCategoryNombre,
       categoryId: cuota.expenseCategoryId,
+      categoryName: cuota.expenseCategoryNombre,
       amount: cuota.montoCuota,
       date: cuota.fechaPago,
-      type: "cuota"
+      type: "cuota",
+      totalCuotas: cuota.totalCuotas ?? 0,
+      pagadas: cuota.pagadas ?? 0,
+      restantes: cuota.restantes ?? 0,
     }));
 
   } catch (err) {
@@ -446,9 +449,19 @@ const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
             {/* Cuotas + progreso lado a lado */}
             <div className="space-y-4">
               {cuotasPendientes.map((cuota) => {
-                const totalCuotas = cuota.totalCuotas || 6;
-                const pagadas = cuota.pagadas || (totalCuotas - cuota.restantes);
-                const progreso = (pagadas / totalCuotas) * 100;
+                const totalCuotas = cuota.totalCuotas ?? 0;
+                const pagadas = cuota.pagadas ?? (totalCuotas - (cuota.restantes ?? 0));
+                const progreso = totalCuotas > 0 
+                  ? Math.round((pagadas / totalCuotas) * 100)
+                  : 0;
+
+                  console.log("cuota debug", {
+                    id: cuota.id,
+                    pagadas: cuota.pagadas,
+                    restantes: cuota.restantes,
+                    totalCuotas: cuota.totalCuotas
+                  });
+
 
                 return (
                   <div key={cuota.id} className="flex gap-4 items-start grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -491,10 +504,10 @@ const fetchCuotasPagadasDelMes = async (token, userId, offset = 0) => {
                         ></div>
                       </div>
                       <p className="text-xs text-gray-600 dark:text-gray-300">
-                        Pagadas: <strong>{pagadas}</strong> / {totalCuotas}
+                        Pagadas: <strong>{cuota.pagadas}</strong> / {cuota.totalCuotas}
                       </p>
                       <p className="text-xs text-gray-600 dark:text-gray-300">
-                        Pendientes: <strong>{cuota.restantes || totalCuotas - pagadas}</strong>
+                        Pendientes: <strong>{cuota.restantes}</strong>
                       </p>
                     </div>
                   </div>
