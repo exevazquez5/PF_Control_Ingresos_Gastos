@@ -1,0 +1,37 @@
+services:
+  backend:
+    build: ./backend/ExpensesTracker.api
+    container_name: backend
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - RunningInDocker=true
+      - DOTNET_SYSTEM_NET_DISABLEIPV6=1
+      - ConnectionStrings__DefaultConnection=${ConnectionStrings__DefaultConnection}
+      - Jwt__Key=${Jwt__Key}
+      - Jwt__Issuer=${Jwt__Issuer}
+      - Jwt__Audience=${Jwt__Audience}
+      - Email__BrevoApiKey=${Email__BrevoApiKey}
+      - Email__SenderEmail=${Email__SenderEmail}
+      - Email__SenderName=${Email__SenderName}
+      - FrontendUrl=${FrontendUrl}
+    ports:
+      - "5000:5000"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+  nginx:
+    build:
+      context: ./frontend
+    container_name: nginx
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    restart: unless-stopped
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
