@@ -30,8 +30,12 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 // Registrar DbContext
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
-    options.UseNpgsql(connectionString)
-           .UseLowerCaseNamingConvention();
+    options.UseNpgsql(connectionString, npgsql =>
+               {
+                   // La tabla de historial real en PROD/DEV es lowercase (creada en junio 2025)
+                   npgsql.MigrationsHistoryTable("__efmigrationshistory");
+               })
+               .UseLowerCaseNamingConvention();
     options.ConfigureWarnings(warnings =>
         warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
 });

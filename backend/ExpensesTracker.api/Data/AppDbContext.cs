@@ -85,7 +85,7 @@ namespace ExpensesTracker.api.Data
             modelBuilder.Entity<Category>()
                 .HasIndex(c => new { c.UserId, c.Name })
                 .IsUnique()
-                .HasFilter("[UserId] IS NOT NULL");
+                .HasFilter("userid IS NOT NULL");
 
             modelBuilder.Entity<Expense>()
                 .HasQueryFilter(e => !e.IsDeleted);
