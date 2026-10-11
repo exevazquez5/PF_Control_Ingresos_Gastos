@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3,ChevronLeft, ChevronRight, Wallet, Settings } from 'lucide-react';
+import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3,ChevronLeft, ChevronRight, Wallet, Settings, Banknote } from 'lucide-react';
 import { PieChart as RechartsPieChart, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Pie } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import SuccessModal from './SucessModal';
@@ -924,22 +924,31 @@ import { parseApiDate } from "../utils/date";
               <span>Nueva Transacción</span>
             </button>
 
-            {/* Ingresos ocupa 3 columnas */}
+            {/* Ingresos ocupa 2 columnas */}
             <button
               onClick={() => navigate('/incomes')}
-              className="sm:col-span-3 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
+              className="sm:col-span-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
             >
               <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Ingresos</span>
             </button>
 
-            {/* Gastos ocupa 3 columnas */}
+            {/* Gastos ocupa 2 columnas */}
             <button
               onClick={() => navigate('/expenses')}
-              className="sm:col-span-3 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
+              className="sm:col-span-2 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
             >
               <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Gastos</span>
+            </button>
+
+            {/* Sueldos ocupa 2 columnas */}
+            <button
+              onClick={() => navigate('/sueldos')}
+              className="sm:col-span-2 bg-gradient-to-r from-amber-500 to-orange-500 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-amber-600 hover:to-orange-600 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
+            >
+              <Banknote className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>Sueldos</span>
             </button>
             
             <button

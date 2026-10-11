@@ -7,6 +7,7 @@ import ForgotPassword from './features/auth/ForgotPassword';
 import ResetPassword  from './features/auth/ResetPassword';
 import Incomes        from './features/Incomes';
 import Expenses       from './features/Expenses';
+import Sueldos        from './features/Sueldos';
 import Header         from './dashboard/Header';
 import { parseJwt }   from './utils/jwt';
 
@@ -113,6 +114,14 @@ export default function App() {
           element={
             isAuthenticated
               ? <Expenses />
+              : <Navigate to="/login" replace />
+          }
+        />
+        <Route
+          path="/sueldos"
+          element={
+            isAuthenticated
+              ? <Sueldos />
               : <Navigate to="/login" replace />
           }
         />

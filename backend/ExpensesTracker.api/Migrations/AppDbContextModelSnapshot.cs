@@ -345,6 +345,98 @@ namespace ExpensesTracker.api.Migrations
                     b.ToTable("incomes", (string)null);
                 });
 
+            modelBuilder.Entity("ExpensesTracker.api.Models.Salary", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("date");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("deletedat");
+
+                    b.Property<decimal>("GrossAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("grossamount");
+
+                    b.Property<int>("IncomeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("incomeid");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("isdeleted");
+
+                    b.Property<decimal>("NetAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("netamount");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("text")
+                        .HasColumnName("notes");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_salaries");
+
+                    b.HasIndex("IncomeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_salaries_incomeid");
+
+                    b.HasIndex("UserId", "Date")
+                        .HasDatabaseName("ix_salaries_userid_date");
+
+                    b.ToTable("salaries", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SalaryDeduction", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("amount");
+
+                    b.Property<int>("ExpenseId")
+                        .HasColumnType("integer")
+                        .HasColumnName("expenseid");
+
+                    b.Property<int>("SalaryId")
+                        .HasColumnType("integer")
+                        .HasColumnName("salaryid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_salarydeductions");
+
+                    b.HasIndex("ExpenseId")
+                        .HasDatabaseName("ix_salarydeductions_expenseid");
+
+                    b.HasIndex("SalaryId", "ExpenseId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_salarydeductions_salaryid_expenseid");
+
+                    b.ToTable("salarydeductions", (string)null);
+                });
+
             modelBuilder.Entity("ExpensesTracker.api.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -571,6 +663,48 @@ namespace ExpensesTracker.api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ExpensesTracker.api.Models.Salary", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.Income", "Income")
+                        .WithOne()
+                        .HasForeignKey("ExpensesTracker.api.Models.Salary", "IncomeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_salaries_incomes_incomeid");
+
+                    b.HasOne("ExpensesTracker.api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_salaries_users_userid");
+
+                    b.Navigation("Income");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SalaryDeduction", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.Expense", "Expense")
+                        .WithMany()
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_salarydeductions_expenses_expenseid");
+
+                    b.HasOne("ExpensesTracker.api.Models.Salary", "Salary")
+                        .WithMany("Deductions")
+                        .HasForeignKey("SalaryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_salarydeductions_salaries_salaryid");
+
+                    b.Navigation("Expense");
+
+                    b.Navigation("Salary");
+                });
+
             modelBuilder.Entity("PagoCuota", b =>
                 {
                     b.HasOne("ExpensesTracker.api.Models.Expense", "Expense")
@@ -598,6 +732,11 @@ namespace ExpensesTracker.api.Migrations
             modelBuilder.Entity("ExpensesTracker.api.Models.CreditCard", b =>
                 {
                     b.Navigation("Expenses");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.Salary", b =>
+                {
+                    b.Navigation("Deductions");
                 });
 
             modelBuilder.Entity("ExpensesTracker.api.Models.User", b =>
