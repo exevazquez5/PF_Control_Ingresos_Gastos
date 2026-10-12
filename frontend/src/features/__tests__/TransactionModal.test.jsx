@@ -10,13 +10,16 @@ const categories = [
   { id: 3, name: 'Freelance', type: 'ingreso', isSystem: true }
 ];
 
-function renderModal({ formData = {}, ...props } = {}) {
+function renderModal({ formData = {}, incomeSources = [], ...props } = {}) {
   const baseFormData = {
     type: 'ingreso',
     category: '',
     amount: '',
     grossAmount: '',
     isRecurring: false,
+    sourceId: null,
+    sourceName: '',
+    mode: 'neto',
     date: '2026-10-12',
     description: '',
     categoryId: '',
@@ -26,7 +29,7 @@ function renderModal({ formData = {}, ...props } = {}) {
   const setFormData = vi.fn();
   const handleSubmit = vi.fn();
 
-  render(
+  const view = render(
     <TransactionModal
       showModal
       onClose={() => {}}
@@ -34,6 +37,7 @@ function renderModal({ formData = {}, ...props } = {}) {
       formData={baseFormData}
       setFormData={setFormData}
       categories={categories}
+      incomeSources={incomeSources}
       enCuotas={false}
       setEnCuotas={() => {}}
       cantidadCuotas={1}
@@ -45,7 +49,7 @@ function renderModal({ formData = {}, ...props } = {}) {
     />
   );
 
-  return { setFormData, handleSubmit, formData: baseFormData };
+  return { setFormData, handleSubmit, formData: baseFormData, ...view };
 }
 
 describe('TransactionModal', () => {
@@ -105,5 +109,66 @@ describe('TransactionModal', () => {
   it('muestra el error del servidor en formError', () => {
     renderModal({ formError: 'Error del servidor' });
     expect(screen.getByText('Error del servidor')).toBeInTheDocument();
+  });
+
+  it('muestra la fuente de ingreso para ingresos y la oculta para gastos (Fase 3)', () => {
+    renderModal();
+    expect(screen.getByLabelText('Fuente de ingreso')).toBeInTheDocument();
+  });
+
+  it('oculta la fuente de ingreso para gastos (Fase 3)', () => {
+    renderModal({ formData: { type: 'gasto' } });
+    expect(screen.queryByLabelText('Fuente de ingreso')).not.toBeInTheDocument();
+  });
+
+  it('al elegir una fuente aplica su modo (D1)', () => {
+    const { setFormData } = renderModal({
+      formData: { categoryId: 1 },
+      incomeSources: [{ id: 7, name: 'Empresa SACME', mode: 'bruto', aliases: ['ACME vieja'] }]
+    });
+
+    fireEvent.click(screen.getByLabelText('Fuente de ingreso'));
+    fireEvent.click(screen.getByRole('button', { name: /Empresa SACME/ }));
+
+    expect(setFormData).toHaveBeenCalledWith(expect.objectContaining({
+      sourceId: 7,
+      sourceName: 'Empresa SACME',
+      mode: 'bruto'
+    }));
+  });
+
+  it('modo bruto muestra el bruto obligatorio y deshabilita el botón (D1)', () => {
+    renderModal({ formData: { mode: 'bruto' } });
+
+    expect(screen.getByText(/Bruto del recibo/)).toBeInTheDocument();
+    expect(screen.getByText('En modo bruto el bruto del recibo es obligatorio.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar' })).toBeDisabled();
+  });
+
+  it('modo bruto con bruto cargado habilita el botón (D1)', () => {
+    renderModal({ formData: { mode: 'bruto', grossAmount: '1500' } });
+
+    expect(screen.queryByText('En modo bruto el bruto del recibo es obligatorio.')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Agregar' })).toBeEnabled();
+  });
+
+  it('incomeFields envía sourceId/sourceName/mode solo para ingresos', async () => {
+    const { incomeFields } = await import('../../utils/transactionService');
+
+    expect(incomeFields({
+      type: 'ingreso', amount: '10', grossAmount: '', isRecurring: false,
+      sourceId: 3, sourceName: '', mode: 'bruto'
+    })).toEqual({
+      grossAmount: null, isRecurring: false, sourceId: 3, sourceName: null, mode: 'bruto'
+    });
+
+    expect(incomeFields({
+      type: 'ingreso', amount: '10', grossAmount: '', isRecurring: false,
+      sourceId: null, sourceName: 'Empresa Nueva', mode: 'neto'
+    })).toEqual({
+      grossAmount: null, isRecurring: false, sourceId: null, sourceName: 'Empresa Nueva', mode: 'neto'
+    });
+
+    expect(incomeFields({ type: 'gasto', amount: '10' })).toEqual({});
   });
 });

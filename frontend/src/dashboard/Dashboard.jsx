@@ -22,6 +22,7 @@ import api from '../api/axios.config.js';
 import { createCreditCard, getCreditCards } from "../services/creditCardsService";
 import { getBudgetProgress, getCurrentBudget, getBudgetByPeriod, createBudget, updateBudget, deleteBudget } from "../services/budgetsService";
 import { getCategoriesFlat } from "../services/categoriesService";
+import { getIncomeSources } from "../services/incomeSourcesService";
 import { parseApiDate, todayInputDate } from "../utils/date";
 import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } from "../utils/transactionTotals";
 
@@ -51,6 +52,9 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
     amount: '',
     grossAmount: '',
     isRecurring: false,
+    sourceId: null,
+    sourceName: '',
+    mode: 'neto',
     date: todayInputDate(),
     description: '',
     categoryId: '',
@@ -95,6 +99,7 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
 
   // Categorías
   const [categories, setCategories] = useState([]);
+  const [incomeSources, setIncomeSources] = useState([]);
   const [showCategoriesSettings, setShowCategoriesSettings] = useState(false);
   const [currentType, setCurrentType] = useState('gasto');
 
@@ -145,6 +150,15 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
   } catch (error) {
     console.error("Error al cargar categorías:", error);
   }
+  };
+
+  const fetchIncomeSources = async () => {
+    try {
+      const data = await getIncomeSources();
+      setIncomeSources(data);
+    } catch (error) {
+      console.error("Error al cargar fuentes de ingreso:", error);
+    }
   };
 
   const handleSubmit = async () => {
@@ -620,6 +634,9 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
       amount: '',
       grossAmount: '',
       isRecurring: false,
+      sourceId: null,
+      sourceName: '',
+      mode: 'neto',
       date: todayInputDate(),
       description: '',
       categoryId: '',
@@ -676,6 +693,7 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
     const init = async () => {
       try {
         await fetchCategories();
+    await fetchIncomeSources();
         const cards = await getCreditCards(token);
         setCreditCards(cards);
 
@@ -960,6 +978,7 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
             formData={formData}
             setFormData={setFormData}
             categories={categories}
+            incomeSources={incomeSources}
             enCuotas={enCuotas}
             setEnCuotas={setEnCuotas}
             cantidadCuotas={cantidadCuotas}

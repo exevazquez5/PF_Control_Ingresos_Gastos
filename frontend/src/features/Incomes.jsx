@@ -5,7 +5,7 @@ import { parseJwt } from "../utils/jwt";
 import { parseApiDate, todayInputDate } from "../utils/date";
 import { incomeFields } from "../utils/transactionService";
 import { sumIncomes, filterByMonth, monthStart } from "../utils/transactionTotals";
-import { deriveSourceKey, formatSourceLabel } from "../utils/sourceKey";
+import { deriveSourceKey, formatSourceLabel, sourceLabel } from "../utils/sourceKey";
 import { Edit2, Trash2, ChevronLeft, ChevronRight, ChevronDown, DollarSign, TrendingUp, List, CalendarDays } from 'lucide-react';
 
 import { useTransactionDelete } from '../hooks/useTransactionDelete';
@@ -51,6 +51,7 @@ export default function IncomesDashboard() {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [allCategories, setAllCategories] = useState([]);
+  const [incomeSources, setIncomeSources] = useState([]);
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -72,7 +73,18 @@ export default function IncomesDashboard() {
 
     fetchCategories(token);
     fetchIncomes(token, userId);
+    fetchIncomeSources(token);
   }, []);
+
+  const fetchIncomeSources = async (token) => {
+    try {
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const response = await api.get(`/IncomeSources`, config);
+      setIncomeSources(response.data);
+    } catch (error) {
+      console.error("Error al obtener fuentes de ingreso:", error);
+    }
+  };
 
   const fetchCategories = async (token) => {
     try {
@@ -188,6 +200,9 @@ export default function IncomesDashboard() {
     amount: '',
     grossAmount: '',
     isRecurring: false,
+    sourceId: null,
+    sourceName: '',
+    mode: 'neto',
     date: todayInputDate(),
     description: '',
     categoryId: ''
@@ -221,6 +236,9 @@ export default function IncomesDashboard() {
       amount: '',
       grossAmount: '',
       isRecurring: false,
+      sourceId: null,
+      sourceName: '',
+      mode: 'neto',
       date: todayInputDate(),
       description: '',
       categoryId: ''
@@ -593,7 +611,7 @@ export default function IncomesDashboard() {
                                   className="text-[11px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full"
                                   title="Fuente derivada de la descripción"
                                 >
-                                  {formatSourceLabel(deriveSourceKey(tx.description)) || 'Sin fuente'}
+                                  {sourceLabel(tx) || 'Sin fuente'}
                                 </span>
                                 <p className="font-medium text-gray-800 dark:text-white text-sm sm:text-base truncate">
                                   {tx.description}
@@ -652,6 +670,7 @@ export default function IncomesDashboard() {
                 formData={formData}
                 setFormData={setFormData}
                 categories={categories}
+                incomeSources={incomeSources}
                 enCuotas={enCuotas}
                 setEnCuotas={setEnCuotas}
                 cantidadCuotas={cantidadCuotas}

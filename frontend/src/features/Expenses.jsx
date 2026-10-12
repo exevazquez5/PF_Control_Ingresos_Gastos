@@ -17,6 +17,7 @@ import ExpensesChart from "../components/expenses/ExpensesChart";
 import ExpensesList from "../components/expenses/ExpensesList";
 
 import { getCategoriesFlat } from "../services/categoriesService";
+import { getIncomeSources } from "../services/incomeSourcesService";
 import { getExpenses } from "../services/expensesService";
 import { fetchCuotasPendientes } from "../services/expensesService";
 import { pagarTodasCuotas } from "../services/expensesService";
@@ -65,6 +66,7 @@ export default function ExpensesDashboard() {
   const [transactions, setTransactions] = useState([]);
   const [categories, setCategories] = useState([]);
   const [allCategories, setAllCategories] = useState([]);
+  const [incomeSources, setIncomeSources] = useState([]);
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [chartView, setChartView] = useState('pie');
@@ -92,6 +94,9 @@ export default function ExpensesDashboard() {
     amount: '',
     grossAmount: '',
     isRecurring: false,
+    sourceId: null,
+    sourceName: '',
+    mode: 'neto',
     date: todayInputDate(),
     description: '',
     categoryId: '',
@@ -129,6 +134,13 @@ export default function ExpensesDashboard() {
         const cats = await getCategoriesFlat();
         setCategories(cats);
         setAllCategories(cats);
+
+        try {
+          const fuentes = await getIncomeSources();
+          setIncomeSources(fuentes);
+        } catch {
+          // La página de gastos no necesita fuentes para funcionar
+        }
 
         const txs = await getExpenses(uid, monthOffset); // <--- uid en vez de userId
         setTransactions(txs);
@@ -276,6 +288,9 @@ export default function ExpensesDashboard() {
       amount: '',
       grossAmount: '',
       isRecurring: false,
+      sourceId: null,
+      sourceName: '',
+      mode: 'neto',
       date: todayInputDate(),
       description: '',
       categoryId: '',
@@ -563,6 +578,7 @@ export default function ExpensesDashboard() {
           formData={formData}
           setFormData={setFormData}
           categories={categories}
+          incomeSources={incomeSources}
           enCuotas={enCuotas}
           setEnCuotas={setEnCuotas}
           cantidadCuotas={cantidadCuotas}
