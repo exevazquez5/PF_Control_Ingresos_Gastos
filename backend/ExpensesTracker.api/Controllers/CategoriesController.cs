@@ -45,6 +45,7 @@ public class CategoriesController : ControllerBase
             ParentCategoryName = c.ParentCategory?.Name,
             Icon = c.Icon,
             Color = c.Color,
+            IsLabor = c.IsLabor,
             IsArchived = c.IsArchived,
             ArchivedAt = c.ArchivedAt,
             CreatedAt = c.CreatedAt,
@@ -87,6 +88,7 @@ public class CategoriesController : ControllerBase
             ParentCategoryName = c.ParentCategory?.Name,
             Icon = c.Icon,
             Color = c.Color,
+            IsLabor = c.IsLabor,
             IsArchived = c.IsArchived,
             ArchivedAt = c.ArchivedAt,
             CreatedAt = c.CreatedAt
@@ -157,6 +159,7 @@ public class CategoriesController : ControllerBase
             ParentCategoryId = dto.ParentCategoryId,
             Icon = dto.Icon,
             Color = dto.Color,
+            IsLabor = dto.IsLabor,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -240,7 +243,8 @@ public class CategoriesController : ControllerBase
             Type = dto.Type.ToLower(),
             ParentCategoryId = dto.ParentCategoryId,
             Icon = dto.Icon ?? originalCategory.Icon,
-            Color = dto.Color ?? originalCategory.Color
+            Color = dto.Color ?? originalCategory.Color,
+            IsLabor = dto.IsLabor
         };
 
         var updated = await _categoryService.UpdateAsync(category);
@@ -333,6 +337,7 @@ public class CategoriesController : ControllerBase
             ParentCategoryId = c.ParentCategoryId,
             Icon = c.Icon,
             Color = c.Color,
+            IsLabor = c.IsLabor,
             IsArchived = c.IsArchived,
             ArchivedAt = c.ArchivedAt,
             CreatedAt = c.CreatedAt
@@ -366,6 +371,7 @@ public class CategoriesController : ControllerBase
                 ParentCategoryName = c.ParentCategory?.Name,
                 Icon = c.Icon,
                 Color = c.Color,
+            IsLabor = c.IsLabor,
                 IsArchived = c.IsArchived,
                 CreatedAt = c.CreatedAt
             });

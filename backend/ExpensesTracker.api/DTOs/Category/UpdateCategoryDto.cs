@@ -19,5 +19,6 @@ namespace ExpensesTracker.api.DTOs.Category
 
         public string? Icon { get; set; }
         public string? Color { get; set; }
+        public bool IsLabor { get; set; }
     }
 }

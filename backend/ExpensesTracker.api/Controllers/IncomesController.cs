@@ -18,15 +18,17 @@ namespace ExpensesTracker.api.Controllers
     {
         private readonly IIncomeService _incomeService;
         private readonly ICategoryService _categoryService;
+        private readonly IIncomeSourceService _incomeSourceService;
 
         // Límite de monto por ingreso (D5): el literal debe ser idéntico al del frontend
         public const decimal MaxAmount = 10000000m;
         public const string MaxAmountMessage = "El monto no puede exceder $10,000,000";
 
-        public IncomesController(IIncomeService incomeService, ICategoryService categoryService)
+        public IncomesController(IIncomeService incomeService, ICategoryService categoryService, IIncomeSourceService incomeSourceService)
         {
             _incomeService = incomeService;
             _categoryService = categoryService;
+            _incomeSourceService = incomeSourceService;
 
         }
 
@@ -64,6 +66,9 @@ namespace ExpensesTracker.api.Controllers
                 Date = i.Date,
                 CategoryId = i.CategoryId,
                 CategoryName = i.Category?.Name,
+                SourceId = i.SourceId,
+                SourceName = i.Source?.Name,
+                Mode = i.Mode,
                 UserId = i.UserId,
                 Username = i.User?.Username,
                 IsDeleted = i.IsDeleted,
@@ -99,6 +104,9 @@ namespace ExpensesTracker.api.Controllers
                 Date = income.Date,
                 CategoryId = income.CategoryId,
                 CategoryName = income.Category?.Name,
+                SourceId = income.SourceId,
+                SourceName = income.Source?.Name,
+                Mode = income.Mode,
                 UserId = income.UserId,
                 Username = income.User?.Username,
                 IsDeleted = income.IsDeleted,
@@ -214,6 +222,39 @@ namespace ExpensesTracker.api.Controllers
             if (category == null)
                 return BadRequest($"La categoria con id {dto.CategoryId} no existe.");
 
+            // Bruto no puede ser menor que el depositado (D1)
+            if (dto.GrossAmount.HasValue && dto.GrossAmount.Value < dto.Amount)
+                return BadRequest("El bruto debe ser mayor o igual al monto depositado.");
+
+            // Fuente + snapshot de modo (D1)
+            Models.IncomeSource source = null;
+            if (dto.SourceId.HasValue)
+            {
+                source = await _incomeSourceService.GetByIdAsync(dto.SourceId.Value);
+                if (source == null || source.UserId != userId)
+                    return BadRequest("La fuente de ingreso no existe.");
+            }
+            else if (!string.IsNullOrWhiteSpace(dto.SourceName))
+            {
+                // Sin SourceId: resolver por nombre (incluye aliases) o crear la fuente (autocomplete D6/D11)
+                source = await _incomeSourceService.FindByNameAsync(userId, dto.SourceName.Trim());
+                if (source == null)
+                {
+                    var (newSource, sourceError, sourceStatus) = await _incomeSourceService.CreateAsync(
+                        userId, dto.SourceName.Trim(), dto.Mode ?? Models.IncomeSource.ModeNeto);
+                    if (newSource == null)
+                        return BadRequest(sourceError);
+                    source = newSource;
+                }
+            }
+            var mode = (dto.Mode ?? source?.Mode ?? Models.IncomeSource.ModeNeto).Trim().ToLowerInvariant();
+            if (mode != Models.IncomeSource.ModeNeto && mode != Models.IncomeSource.ModeBruto)
+                return BadRequest("El modo debe ser \"neto\" o \"bruto\".");
+
+            // En modo bruto el bruto del recibo es obligatorio (D1/D4)
+            if (mode == Models.IncomeSource.ModeBruto && !dto.GrossAmount.HasValue)
+                return BadRequest("El modo bruto requiere indicar el bruto del recibo.");
+
             var income = new Models.Income
             {
                 Amount = dto.Amount,
@@ -222,6 +263,8 @@ namespace ExpensesTracker.api.Controllers
                 Description = dto.Description,
                 Date = dto.Date,
                 CategoryId = dto.CategoryId,
+                SourceId = source?.Id,
+                Mode = mode,
                 UserId = userId
             };
 
@@ -237,6 +280,9 @@ namespace ExpensesTracker.api.Controllers
                 Date = created.Date,
                 CategoryId = created.CategoryId,
                 CategoryName = created.Category?.Name ?? "N/A",
+                SourceId = created.SourceId,
+                SourceName = created.Source?.Name,
+                Mode = created.Mode,
                 UserId = created.UserId,
                 Username = created.User?.Username ?? "N/A",
                 IsDeleted = created.IsDeleted,
@@ -294,6 +340,26 @@ namespace ExpensesTracker.api.Controllers
             if (category == null)
                 return BadRequest($"La categoria con id {dto.CategoryId} no existe.");
 
+            // Bruto no puede ser menor que el depositado (D1)
+            if (dto.GrossAmount.HasValue && dto.GrossAmount.Value < dto.Amount)
+                return BadRequest("El bruto debe ser mayor o igual al monto depositado.");
+
+            // Fuente + snapshot de modo (D1)
+            Models.IncomeSource source = null;
+            if (dto.SourceId.HasValue)
+            {
+                source = await _incomeSourceService.GetByIdAsync(dto.SourceId.Value);
+                if (source == null || source.UserId != userId)
+                    return BadRequest("La fuente de ingreso no existe.");
+            }
+            var mode = (dto.Mode ?? source?.Mode ?? Models.IncomeSource.ModeNeto).Trim().ToLowerInvariant();
+            if (mode != Models.IncomeSource.ModeNeto && mode != Models.IncomeSource.ModeBruto)
+                return BadRequest("El modo debe ser \"neto\" o \"bruto\".");
+
+            // En modo bruto el bruto del recibo es obligatorio (D1/D4)
+            if (mode == Models.IncomeSource.ModeBruto && !dto.GrossAmount.HasValue)
+                return BadRequest("El modo bruto requiere indicar el bruto del recibo.");
+
             var isAdmin = User.IsInRole("Admin");
 
             if (!isAdmin && incomeToUpdate.UserId != userId)
@@ -305,6 +371,8 @@ namespace ExpensesTracker.api.Controllers
             incomeToUpdate.Description = dto.Description;
             incomeToUpdate.Date = dto.Date;
             incomeToUpdate.CategoryId = dto.CategoryId;
+            incomeToUpdate.SourceId = source?.Id;
+            incomeToUpdate.Mode = mode;
 
             var updated = await _incomeService.Update(incomeToUpdate);
             if (!updated)
@@ -373,6 +441,18 @@ namespace ExpensesTracker.api.Controllers
         }
 
         [Authorize]
+        [HttpGet("overview")]
+        public async Task<ActionResult<object>> GetOverview()
+        {
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+                return Unauthorized("Token inválido.");
+
+            var overview = await _incomeService.GetOverviewAsync(userId);
+            return Ok(overview);
+        }
+
+        [Authorize]
         [HttpGet("deleted")]
         public async Task<ActionResult<List<IncomeDto>>> GetDeleted()
         {
@@ -392,6 +472,9 @@ namespace ExpensesTracker.api.Controllers
                 Date = i.Date,
                 CategoryId = i.CategoryId,
                 CategoryName = i.Category?.Name,
+                SourceId = i.SourceId,
+                SourceName = i.Source?.Name,
+                Mode = i.Mode,
                 UserId = i.UserId,
                 Username = i.User?.Username
             }).ToList();

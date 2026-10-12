@@ -13,6 +13,9 @@ namespace ExpensesTracker.api.Data
         public DbSet<Category> Categories { get; set; }
         public DbSet<Expense> Expenses { get; set; }
         public DbSet<Income> Incomes { get; set; }
+        public DbSet<IncomeSource> IncomeSources { get; set; }
+        public DbSet<IncomeSourceAlias> IncomeSourceAliases { get; set; }
+        public DbSet<DiscountRule> DiscountRules { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
         public DbSet<PagoCuota> PagosCuotas { get; set; }
@@ -101,6 +104,48 @@ namespace ExpensesTracker.api.Data
 
             modelBuilder.Entity<Category>()
                 .HasQueryFilter(c => !c.IsArchived);
+
+            modelBuilder.Entity<IncomeSource>()
+                .HasIndex(s => new { s.UserId, s.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<IncomeSource>()
+                .HasOne(s => s.User)
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<IncomeSource>()
+                .HasQueryFilter(s => !s.IsArchived);
+
+            modelBuilder.Entity<IncomeSourceAlias>()
+                .HasIndex(a => new { a.UserId, a.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<IncomeSourceAlias>()
+                .HasOne(a => a.IncomeSource)
+                .WithMany()
+                .HasForeignKey(a => a.IncomeSourceId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<DiscountRule>()
+                .HasIndex(r => new { r.IncomeSourceId, r.Name })
+                .IsUnique();
+
+            modelBuilder.Entity<DiscountRule>()
+                .HasOne(r => r.User)
+                .WithMany()
+                .HasForeignKey(r => r.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<DiscountRule>()
+                .HasQueryFilter(r => !r.IsArchived);
+
+            modelBuilder.Entity<Income>()
+                .HasOne(i => i.Source)
+                .WithMany(s => s.Incomes)
+                .HasForeignKey(i => i.SourceId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             // All date columns are `timestamp without time zone`, which Npgsql maps to
             // DateTime with Kind=Unspecified. Normalize any Utc/Local Kind (e.g. DateTime.UtcNow
