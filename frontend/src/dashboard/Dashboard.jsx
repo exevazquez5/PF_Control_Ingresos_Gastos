@@ -21,7 +21,7 @@ import api from '../api/axios.config.js';
 import { createCreditCard, getCreditCards } from "../services/creditCardsService";
 import { getBudgetProgress, getCurrentBudget, getBudgetByPeriod, createBudget, updateBudget, deleteBudget } from "../services/budgetsService";
 import { getCategoriesFlat } from "../services/categoriesService";
-import { parseApiDate } from "../utils/date";
+import { parseApiDate, todayInputDate } from "../utils/date";
 import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } from "../utils/transactionTotals";
 
   const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
@@ -48,7 +48,9 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
     type: 'ingreso',
     category: '',
     amount: '',
-    date: '',
+    grossAmount: '',
+    isRecurring: false,
+    date: todayInputDate(),
     description: '',
     categoryId: '',
     fundingSource: 'Income'
@@ -616,7 +618,9 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
       type: 'ingreso',
       category: '',
       amount: '',
-      date: '',
+      grossAmount: '',
+      isRecurring: false,
+      date: todayInputDate(),
       description: '',
       categoryId: '',
       fundingSource: 'Income'

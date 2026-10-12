@@ -10,7 +10,8 @@ import ConfirmDeleteModal from "../dashboard/ConfirmDeleteModal";
 import SuccessModal from "../dashboard/SucessModal";
 import PayAllModal from "../dashboard/PayAllModal";
 import formatCurrency from "../utils/format.js"
-import { parseApiDate } from "../utils/date";
+import { parseApiDate, todayInputDate } from "../utils/date";
+import { incomeFields } from "../utils/transactionService";
 
 import ExpensesChart from "../components/expenses/ExpensesChart";
 import ExpensesList from "../components/expenses/ExpensesList";
@@ -89,7 +90,9 @@ export default function ExpensesDashboard() {
     type: 'ingreso',
     category: '',
     amount: '',
-    date: '',
+    grossAmount: '',
+    isRecurring: false,
+    date: todayInputDate(),
     description: '',
     categoryId: '',
     fundingSource: 'Income'
@@ -271,7 +274,9 @@ export default function ExpensesDashboard() {
       type: 'ingreso',
       category: '',
       amount: '',
-      date: '',
+      grossAmount: '',
+      isRecurring: false,
+      date: todayInputDate(),
       description: '',
       categoryId: '',
       fundingSource: 'Income'
@@ -315,6 +320,7 @@ export default function ExpensesDashboard() {
       // Construir el cuerpo de la solicitud
       const body = {
         amount: parseFloat(formData.amount),
+        ...incomeFields(formData),
         description: formData.description,
         date: new Date(formData.date).toISOString(),
         categoryId: Number(formData.categoryId),

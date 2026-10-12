@@ -2,7 +2,8 @@ import React, { useState, useEffect } from "react";
 import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { parseJwt } from "../utils/jwt";
-import { parseApiDate } from "../utils/date";
+import { parseApiDate, todayInputDate } from "../utils/date";
+import { incomeFields } from "../utils/transactionService";
 import { sumIncomes, filterByMonth, monthStart } from "../utils/transactionTotals";
 import { deriveSourceKey, formatSourceLabel } from "../utils/sourceKey";
 import { Edit2, Trash2, ChevronLeft, ChevronRight, ChevronDown, DollarSign, TrendingUp, List, CalendarDays } from 'lucide-react';
@@ -185,7 +186,9 @@ export default function IncomesDashboard() {
     type: 'ingreso',
     category: '',
     amount: '',
-    date: '',
+    grossAmount: '',
+    isRecurring: false,
+    date: todayInputDate(),
     description: '',
     categoryId: ''
   });
@@ -216,7 +219,9 @@ export default function IncomesDashboard() {
       type: 'ingreso',
       category: '',
       amount: '',
-      date: '',
+      grossAmount: '',
+      isRecurring: false,
+      date: todayInputDate(),
       description: '',
       categoryId: ''
     });
@@ -251,6 +256,7 @@ export default function IncomesDashboard() {
       // Construir el cuerpo de la solicitud
       const body = {
         amount: parseFloat(formData.amount),
+        ...incomeFields(formData),
         description: formData.description,
         date: new Date(formData.date).toISOString(),
         categoryId: Number(formData.categoryId),

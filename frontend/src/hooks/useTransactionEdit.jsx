@@ -10,6 +10,8 @@ export const useTransactionEdit = (setEditingTransaction, setFormData, setShowMo
       type: normalizedType,
       category: transaction.category || '',
       amount: transaction.amount,
+      grossAmount: transaction.grossAmount ?? '',
+      isRecurring: transaction.isRecurring ?? false,
       date: (transaction.expenseDate || transaction.date).split('T')[0],
       description: transaction.description || '',
       categoryId: transaction.categoryId || '',

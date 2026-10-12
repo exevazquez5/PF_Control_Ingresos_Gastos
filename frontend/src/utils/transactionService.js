@@ -31,10 +31,20 @@ export async function deleteTransactionOnServer({ base, id, token }) {
   );
 }
 
+/** Campos exclusivos de ingresos: bruto (D4) y recurrencia (D10) */
+export function incomeFields(formData) {
+  if ((formData.type || '').toLowerCase() !== 'ingreso') return {};
+  return {
+    grossAmount: formData.grossAmount ? parseFloat(formData.grossAmount) : null,
+    isRecurring: !!formData.isRecurring
+  };
+}
+
 /** Build transaction body from formData */
 export function buildBody(formData, userId) {
   return {
     amount:      parseFloat(formData.amount),
+    ...incomeFields(formData),
     description: formData.description,
     date:        new Date(formData.date).toISOString(),
     categoryId:  Number(formData.categoryId),
