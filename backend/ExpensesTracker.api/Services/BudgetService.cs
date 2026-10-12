@@ -409,11 +409,11 @@ namespace ExpensesTracker.api.Services
             return true;
         }
 
-        public async Task<bool> RestoreAsync(int budgetId)
+        public async Task<bool> RestoreAsync(int userId, int budgetId)
         {
             var budget = await _context.Budgets
                 .IgnoreQueryFilters()
-                .FirstOrDefaultAsync(b => b.Id == budgetId);
+                .FirstOrDefaultAsync(b => b.Id == budgetId && b.UserId == userId);
 
             if (budget == null) return false;
 

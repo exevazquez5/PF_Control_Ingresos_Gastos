@@ -25,7 +25,10 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
 
       - name: Build backend
-        run: dotnet build backend/ExpensesTracker.api/ExpensesTracker.api.csproj -c Release
+        run: dotnet build backend/ExpensesTracker.api.sln -c Release
+
+      - name: Run backend tests
+        run: dotnet test backend/ExpensesTracker.api.Tests/ExpensesTracker.api.Tests.csproj -c Release --no-build
 
       - name: Install frontend dependencies
         working-directory: frontend

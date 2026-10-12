@@ -15,7 +15,7 @@ namespace ExpensesTracker.api.Interfaces
         Task<decimal> CalcularMontoPagado(int expenseId);
         Task<Dictionary<int, (bool TieneCuotas, decimal MontoPagado)>> GetPagosInfoAsync(IEnumerable<int> expenseIds);
         Task<bool> ArchiveAsync(int id, int? userId = null);
-        Task<bool> RestoreAsync(int id);
+        Task<bool> RestoreAsync(int id, int userId, bool isAdmin = false);
         Task<List<Expense>> GetDeletedByUserId(int userId);
     }
 }

@@ -160,10 +160,12 @@ public class ExpenseService : IExpenseService
         return true;
     }
 
-    public async Task<bool> RestoreAsync(int id)
+    public async Task<bool> RestoreAsync(int id, int userId, bool isAdmin = false)
     {
         var expense = await _context.Expenses.IgnoreQueryFilters().FirstOrDefaultAsync(e => e.Id == id);
         if (expense == null) return false;
+
+        if (!isAdmin && expense.UserId != userId) return false;
 
         if (!expense.IsDeleted) return false;
 

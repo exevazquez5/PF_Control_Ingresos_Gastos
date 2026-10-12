@@ -15,6 +15,6 @@ public interface IIncomeService
     Task<object> GetSummaryByUser(int userId);
     Task<List<Income>> Filter(int? userId, int? categoryId, DateTime? from, DateTime? to);
     Task<bool> ArchiveAsync(int id, int? userId = null);
-    Task<bool> RestoreAsync(int id);
+    Task<bool> RestoreAsync(int id, int userId, bool isAdmin = false);
     Task<List<Income>> GetDeletedByUserId(int userId);
 }

@@ -143,8 +143,11 @@ builder.Services.AddControllers()
 
 var app = builder.Build();
 
-using (var scope = app.Services.CreateScope())
+// En el entorno Testing la base se crea con EnsureCreated desde el proyecto de tests.
+if (!app.Environment.IsEnvironment("Testing"))
 {
+    using (var scope = app.Services.CreateScope())
+    {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
 
     int retries = 0;
@@ -175,6 +178,7 @@ using (var scope = app.Services.CreateScope())
 
     var categoryService = scope.ServiceProvider.GetRequiredService<ICategoryService>();
     await categoryService.SeedSystemCategoriesAsync();
+    }
 }
 
 // Middleware
@@ -203,3 +207,5 @@ app.MapGet("/health", () => Results.Ok(new { status = "ok", utc = DateTime.UtcNo
 app.MapControllers();
 
 app.Run();
+
+public partial class Program { }
