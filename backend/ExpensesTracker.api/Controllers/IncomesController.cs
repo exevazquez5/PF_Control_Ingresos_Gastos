@@ -306,6 +306,11 @@ namespace ExpensesTracker.api.Controllers
             var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
                 return Unauthorized();
+
+            var isAdmin = User.IsInRole("Admin");
+            if (!isAdmin && incomeToUpdate.UserId != userId)
+                return StatusCode(403, "No puedes modificar ingresos de otro usuario.");
+
             // ? Validar que el monto sea mayor a cero
             if (dto.Amount <= 0)
                 return BadRequest("El monto debe ser mayor a cero.");
@@ -351,17 +356,24 @@ namespace ExpensesTracker.api.Controllers
                 if (source == null || source.UserId != userId)
                     return BadRequest("La fuente de ingreso no existe.");
             }
+            else if (!string.IsNullOrWhiteSpace(dto.SourceName))
+            {
+                source = await _incomeSourceService.FindByNameAsync(userId, dto.SourceName.Trim());
+                if (source == null)
+                {
+                    var (newSource, sourceError, _) = await _incomeSourceService.CreateAsync(
+                        userId, dto.SourceName.Trim(), dto.Mode ?? Models.IncomeSource.ModeNeto);
+                    if (newSource == null)
+                        return BadRequest(sourceError);
+                    source = newSource;
+                }
+            }
             var mode = (dto.Mode ?? source?.Mode ?? Models.IncomeSource.ModeNeto).Trim().ToLowerInvariant();
             if (mode != Models.IncomeSource.ModeNeto && mode != Models.IncomeSource.ModeBruto)
                 return BadRequest("El modo debe ser \"neto\" o \"bruto\".");
 
             // En modo bruto no aplica el bruto del recibo (3.5a): lo depositado ES el bruto.
             var grossAmount = mode == Models.IncomeSource.ModeBruto ? (decimal?)null : dto.GrossAmount;
-
-            var isAdmin = User.IsInRole("Admin");
-
-            if (!isAdmin && incomeToUpdate.UserId != userId)
-                return StatusCode(403, "No puedes modificar ingresos de otro usuario.");
 
             incomeToUpdate.Amount = dto.Amount;
             incomeToUpdate.GrossAmount = grossAmount;
