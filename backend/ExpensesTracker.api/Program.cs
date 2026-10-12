@@ -52,7 +52,6 @@ builder.Services.AddScoped<IIncomeService, IncomeService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IBudgetService, BudgetService>();
-builder.Services.AddScoped<ISalaryService, SalaryService>();
 
 // Detras del proxy de Render: respetar X-Forwarded-For / X-Forwarded-Proto
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
