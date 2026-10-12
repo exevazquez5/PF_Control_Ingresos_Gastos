@@ -263,6 +263,14 @@ namespace ExpensesTracker.api.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("isexpected");
 
+                    b.Property<int?>("LinkedCategoryId")
+                        .HasColumnType("integer")
+                        .HasColumnName("linkedcategoryid");
+
+                    b.Property<string>("LinkedDescription")
+                        .HasColumnType("text")
+                        .HasColumnName("linkeddescription");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text")
@@ -278,6 +286,9 @@ namespace ExpensesTracker.api.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_discountrules");
+
+                    b.HasIndex("LinkedCategoryId")
+                        .HasDatabaseName("ix_discountrules_linkedcategoryid");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_discountrules_userid");
@@ -352,6 +363,65 @@ namespace ExpensesTracker.api.Migrations
                         .HasDatabaseName("ix_expenses_userid");
 
                     b.ToTable("expenses", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.ExpenseRuleAssignment", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<int>("ExpenseId")
+                        .HasColumnType("integer")
+                        .HasColumnName("expenseid");
+
+                    b.Property<int>("Month")
+                        .HasColumnType("integer")
+                        .HasColumnName("month");
+
+                    b.Property<int?>("PagoCuotaId")
+                        .HasColumnType("integer")
+                        .HasColumnName("pagocuotaid");
+
+                    b.Property<int>("RuleId")
+                        .HasColumnType("integer")
+                        .HasColumnName("ruleid");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id")
+                        .HasName("pk_expenseruleassignments");
+
+                    b.HasIndex("ExpenseId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_expenseruleassignments_expenseid")
+                        .HasFilter("pagocuotaid IS NULL");
+
+                    b.HasIndex("PagoCuotaId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_expenseruleassignments_pagocuotaid")
+                        .HasFilter("pagocuotaid IS NOT NULL");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_expenseruleassignments_userid");
+
+                    b.HasIndex("RuleId", "Year", "Month")
+                        .HasDatabaseName("ix_expenseruleassignments_ruleid_year_month");
+
+                    b.ToTable("expenseruleassignments", (string)null);
                 });
 
             modelBuilder.Entity("ExpensesTracker.api.Models.Income", b =>
@@ -696,6 +766,12 @@ namespace ExpensesTracker.api.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_discountrules_incomesources_incomesourceid");
 
+                    b.HasOne("ExpensesTracker.api.Models.Category", "LinkedCategory")
+                        .WithMany()
+                        .HasForeignKey("LinkedCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_discountrules_categories_linkedcategoryid");
+
                     b.HasOne("ExpensesTracker.api.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -704,6 +780,8 @@ namespace ExpensesTracker.api.Migrations
                         .HasConstraintName("fk_discountrules_users_userid");
 
                     b.Navigation("IncomeSource");
+
+                    b.Navigation("LinkedCategory");
 
                     b.Navigation("User");
                 });
@@ -733,6 +811,36 @@ namespace ExpensesTracker.api.Migrations
                     b.Navigation("Category");
 
                     b.Navigation("CreditCard");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.ExpenseRuleAssignment", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.Expense", "Expense")
+                        .WithMany()
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_expenseruleassignments_expenses_expenseid");
+
+                    b.HasOne("ExpensesTracker.api.Models.DiscountRule", "Rule")
+                        .WithMany()
+                        .HasForeignKey("RuleId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_expenseruleassignments_discountrules_ruleid");
+
+                    b.HasOne("ExpensesTracker.api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_expenseruleassignments_users_userid");
+
+                    b.Navigation("Expense");
+
+                    b.Navigation("Rule");
 
                     b.Navigation("User");
                 });

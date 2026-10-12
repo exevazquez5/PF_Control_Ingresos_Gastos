@@ -1,13 +1,22 @@
 using ExpensesTracker.api.Data;
+using ExpensesTracker.api.Dtos.DiscountRule;
 using ExpensesTracker.api.Interfaces;
 using ExpensesTracker.api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Text;
+using System.Text.RegularExpressions;
 
 namespace ExpensesTracker.api.Services
 {
     public class DiscountRuleService : IDiscountRuleService
     {
         private readonly AppDbContext _context;
+
+        private const string MsgRuleNotFound = "La regla no existe.";
+        private const string MsgLinkedOnlyBruto = "Las reglas vinculadas a gastos y las reglas esperadas solo pueden crearse en fuentes de modo Bruto.";
+        private const string MsgLinkedCategoryInvalid = "La categoría vinculada no existe o no es de tipo gasto.";
+        private static readonly Regex LinkedDescriptionRx = new(@"^[a-zA-Z0-9\s.,\-()áéíóúÁÉÍÓÚñÑ+]*$");
 
         public DiscountRuleService(AppDbContext context)
         {
@@ -18,6 +27,7 @@ namespace ExpensesTracker.api.Services
         {
             var query = _context.DiscountRules
                 .Include(r => r.IncomeSource)
+                .Include(r => r.LinkedCategory)
                 .Where(r => r.UserId == userId);
 
             if (sourceId.HasValue)
@@ -30,6 +40,7 @@ namespace ExpensesTracker.api.Services
         {
             return await _context.DiscountRules
                 .Include(r => r.IncomeSource)
+                .Include(r => r.LinkedCategory)
                 .FirstOrDefaultAsync(r => r.Id == id);
         }
 
@@ -40,8 +51,8 @@ namespace ExpensesTracker.api.Services
             if (source == null)
                 return (null, "La fuente de ingreso no existe.", 404);
 
-            var error = Validate(rule);
-            if (error != null) return (null, error, 400);
+            var (error, statusCode) = Validate(rule, source);
+            if (error != null) return (null, error, statusCode);
 
             rule.Name = rule.Name.Trim();
             if (await _context.DiscountRules.AnyAsync(r =>
@@ -59,18 +70,25 @@ namespace ExpensesTracker.api.Services
         {
             var existing = await _context.DiscountRules
                 .FirstOrDefaultAsync(r => r.Id == rule.Id && r.UserId == rule.UserId);
-            if (existing == null) return (false, "La regla no existe.", 404);
+            if (existing == null) return (false, MsgRuleNotFound, 404);
 
+            IncomeSource? source;
             if (rule.IncomeSourceId != existing.IncomeSourceId)
             {
-                var source = await _context.IncomeSources
+                source = await _context.IncomeSources
                     .FirstOrDefaultAsync(s => s.Id == rule.IncomeSourceId && s.UserId == rule.UserId);
                 if (source == null)
                     return (false, "La fuente de ingreso no existe.", 404);
             }
+            else
+            {
+                source = await _context.IncomeSources
+                    .FirstOrDefaultAsync(s => s.Id == rule.IncomeSourceId);
+            }
+            if (source == null) return (false, "La fuente de ingreso no existe.", 404);
 
-            var error = Validate(rule);
-            if (error != null) return (false, error, 400);
+            var (error, statusCode) = Validate(rule, source);
+            if (error != null) return (false, error, statusCode);
 
             var newName = rule.Name.Trim();
             if (await _context.DiscountRules.AnyAsync(r =>
@@ -81,6 +99,8 @@ namespace ExpensesTracker.api.Services
             existing.Name = newName;
             existing.Percentage = rule.Percentage;
             existing.FixedAmount = rule.FixedAmount;
+            existing.LinkedCategoryId = rule.LinkedCategoryId;
+            existing.LinkedDescription = string.IsNullOrWhiteSpace(rule.LinkedDescription) ? null : rule.LinkedDescription.Trim();
             existing.IsExpected = rule.IsExpected;
 
             await _context.SaveChangesAsync();
@@ -115,36 +135,409 @@ namespace ExpensesTracker.api.Services
             return true;
         }
 
-        private static string? Validate(DiscountRule rule)
+        public async Task<ExpenseRuleAssignmentDto> AssignExpenseAsync(int userId, int ruleId, AssignExpenseDto dto)
+        {
+            var rule = await _context.DiscountRules
+                .FirstOrDefaultAsync(r => r.Id == ruleId && r.UserId == userId);
+            if (rule == null)
+                throw new KeyNotFoundException(MsgRuleNotFound);
+
+            if (!rule.IsLinked)
+                throw new InvalidOperationException("Solo las reglas vinculadas a gastos admiten reasignación manual.");
+
+            var expense = await _context.Expenses
+                .IgnoreQueryFilters()
+                .FirstOrDefaultAsync(e => e.Id == dto.ExpenseId && e.UserId == userId && !e.IsDeleted);
+            if (expense == null)
+                throw new KeyNotFoundException("El gasto no existe.");
+
+            var tieneCuotas = await _context.PagosCuotas.AnyAsync(pc => pc.ExpenseId == expense.Id);
+
+            if (!tieneCuotas && dto.PagoCuotaId.HasValue)
+                throw new InvalidOperationException("El gasto no tiene cuotas.");
+
+            if (tieneCuotas)
+            {
+                if (!dto.PagoCuotaId.HasValue)
+                    throw new InvalidOperationException("El gasto posee cuotas; debe indicar la cuota puntual a asignar.");
+                var cuota = await _context.PagosCuotas.FirstOrDefaultAsync(pc => pc.Id == dto.PagoCuotaId.Value && pc.ExpenseId == expense.Id);
+                if (cuota == null)
+                    throw new KeyNotFoundException("La cuota no existe.");
+            }
+
+            if (dto.Year < 2000 || dto.Year > 2100 || dto.Month < 1 || dto.Month > 12)
+                throw new InvalidOperationException("El período indicado no es válido.");
+
+            var alreadyAssigned = dto.PagoCuotaId.HasValue
+                ? await _context.ExpenseRuleAssignments.AnyAsync(a => a.PagoCuotaId == dto.PagoCuotaId.Value)
+                : await _context.ExpenseRuleAssignments.AnyAsync(a => a.ExpenseId == expense.Id && a.PagoCuotaId == null);
+            if (alreadyAssigned)
+                throw new InvalidOperationException(dto.PagoCuotaId.HasValue
+                    ? "La cuota ya está asignada a una regla."
+                    : "El gasto ya está asignado a una regla.");
+
+            var assignment = new ExpenseRuleAssignment
+            {
+                UserId = userId,
+                RuleId = ruleId,
+                ExpenseId = expense.Id,
+                PagoCuotaId = dto.PagoCuotaId,
+                Year = dto.Year,
+                Month = dto.Month,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            _context.ExpenseRuleAssignments.Add(assignment);
+            await _context.SaveChangesAsync();
+
+            return MapAssignment(assignment);
+        }
+
+        public async Task<bool> UnassignExpenseAsync(int userId, int ruleId, int expenseId, int? pagoCuotaId)
+        {
+            var q = _context.ExpenseRuleAssignments.AsQueryable();
+            if (pagoCuotaId.HasValue)
+                q = q.Where(a => a.PagoCuotaId == pagoCuotaId.Value);
+            else
+                q = q.Where(a => a.ExpenseId == expenseId && a.PagoCuotaId == null);
+
+            var assignment = await q.FirstOrDefaultAsync(a => a.UserId == userId && a.RuleId == ruleId);
+            if (assignment == null) return false;
+
+            _context.ExpenseRuleAssignments.Remove(assignment);
+            await _context.SaveChangesAsync();
+            return true;
+        }
+
+        public async Task<MonthDiscountsDto> ComputeMonthDiscountsAsync(int userId, int year, int month)
+        {
+            var start = new DateTime(year, month, 1);
+            var end = start.AddMonths(1);
+
+            var incomes = await _context.Incomes
+                .IgnoreQueryFilters()
+                .Include(i => i.Source)
+                .Where(i => i.UserId == userId && !i.IsDeleted && i.Date >= start && i.Date < end)
+                .ToListAsync();
+
+            var rules = await _context.DiscountRules
+                .Where(r => r.UserId == userId)
+                .Include(r => r.IncomeSource)
+                .OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
+                .ToListAsync();
+
+            var allAssignments = await _context.ExpenseRuleAssignments
+                .Where(a => a.UserId == userId)
+                .ToListAsync();
+
+            var monthAssignments = allAssignments
+                .Where(a => a.Year == year && a.Month == month)
+                .ToList();
+
+            var nonCuotaExpenses = await _context.Expenses
+                .IgnoreQueryFilters()
+                .Where(e => e.UserId == userId && !e.IsDeleted
+                    && e.Date >= start && e.Date < end
+                    && !_context.PagosCuotas.Any(pc => pc.ExpenseId == e.Id))
+                .ToListAsync();
+
+            var pagosDelMes = await _context.PagosCuotas
+                .Include(pc => pc.Expense)
+                .Where(pc => pc.Expense != null && !pc.Expense.IsDeleted && pc.Expense.UserId == userId
+                    && pc.DueDate >= start && pc.DueDate < end)
+                .ToListAsync();
+
+            var candidates = new List<CandidateExpense>();
+            foreach (var e in nonCuotaExpenses)
+                candidates.Add(new CandidateExpense(new CandidateKey(e.Id, null), e.Amount, e.CategoryId, e.Description));
+            foreach (var pc in pagosDelMes)
+                candidates.Add(new CandidateExpense(new CandidateKey(pc.ExpenseId, pc.Id), pc.MontoCuota, pc.Expense!.CategoryId, pc.Expense.Description));
+
+            var excludedExpenseIds = allAssignments.Where(a => a.PagoCuotaId == null).Select(a => a.ExpenseId).ToHashSet();
+            var excludedCuotaIds = allAssignments.Where(a => a.PagoCuotaId != null).Select(a => a.PagoCuotaId!.Value).ToHashSet();
+
+            var autoMatches = new Dictionary<int, decimal>();
+            var autoCounts = new Dictionary<int, int>();
+            var consumed = new HashSet<CandidateKey>();
+
+            foreach (var rule in rules.Where(r => r.IsLinked && r.IncomeSource?.Mode != IncomeSource.ModeNeto))
+            {
+                var amount = 0m;
+                var count = 0;
+                foreach (var cand in candidates.Where(c => !consumed.Contains(c.Key) && !IsTaken(c.Key, excludedExpenseIds, excludedCuotaIds)))
+                {
+                    if (Matches(rule, cand))
+                    {
+                        amount += cand.Amount;
+                        count++;
+                        consumed.Add(cand.Key);
+                    }
+                }
+                if (count > 0)
+                {
+                    autoMatches[rule.Id] = amount;
+                    autoCounts[rule.Id] = count;
+                }
+            }
+
+            var sourcesById = new Dictionary<int, SourceDiscountsDto>();
+            const int syntheticSourceId = -1;
+
+            foreach (var income in incomes)
+            {
+                var sourceId = income.SourceId ?? syntheticSourceId;
+                if (!sourcesById.TryGetValue(sourceId, out var s))
+                    sourcesById[sourceId] = s = new SourceDiscountsDto
+                    {
+                        SourceId = sourceId,
+                        SourceName = income.Source?.Name ?? "Sin fuente",
+                        // El modo de la fuente define la deducción de sus reglas.
+                        Mode = income.Source?.Mode
+                            ?? (string.Equals(income.Mode?.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase) ? IncomeSource.ModeBruto : IncomeSource.ModeNeto),
+                        Reglas = new List<DiscountLineDto>()
+                    };
+
+                // Cada ingreso se clasifica por su propio snapshot de modo (D1).
+                var incomeMode = string.IsNullOrWhiteSpace(income.Mode)
+                    ? (income.Source?.Mode ?? IncomeSource.ModeNeto)
+                    : (string.Equals(income.Mode.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase) ? IncomeSource.ModeBruto : IncomeSource.ModeNeto);
+
+                if (incomeMode == IncomeSource.ModeBruto) s.IngresosBruto += income.Amount;
+                else
+                {
+                    s.IngresosNeto += income.Amount;
+                    if (income.GrossAmount.HasValue) s.GrossTotal = (s.GrossTotal ?? 0m) + income.GrossAmount.Value;
+                }
+            }
+
+            foreach (var rule in rules)
+            {
+                if (!sourcesById.TryGetValue(rule.IncomeSourceId, out var s))
+                    sourcesById[rule.IncomeSourceId] = s = new SourceDiscountsDto
+                    {
+                        SourceId = rule.IncomeSourceId,
+                        SourceName = rule.IncomeSource?.Name ?? "Fuente n/o",
+                        Mode = rule.IncomeSource?.Mode ?? IncomeSource.ModeNeto,
+                        Reglas = new List<DiscountLineDto>()
+                    };
+
+                var isNeto = s.Mode != IncomeSource.ModeBruto;
+                decimal? monto = null;
+                var deduce = false;
+                var requiereBruto = false;
+                var gastosVinculados = 0;
+
+                if (rule.FixedAmount.HasValue)
+                {
+                    monto = rule.FixedAmount;
+                    deduce = !isNeto;
+                }
+                else if (rule.Percentage.HasValue)
+                {
+                    var baseImporte = isNeto ? s.GrossTotal : s.IngresosBruto;
+                    if (baseImporte is > 0)
+                        monto = Math.Round(baseImporte.Value * rule.Percentage.Value / 100m, 2);
+                    else
+                        requiereBruto = true;
+                    deduce = !isNeto;
+                }
+                else if (rule.IsLinked)
+                {
+                    var manual = monthAssignments.Where(a => a.RuleId == rule.Id).ToList();
+                    var manualAmount = await ExpenseRuleAssignmentAmountAsync(manual);
+                    var auto = autoMatches.ContainsKey(rule.Id) ? autoMatches[rule.Id] : 0m;
+                    gastosVinculados = manual.Count + (autoCounts.ContainsKey(rule.Id) ? autoCounts[rule.Id] : 0);
+                    if (gastosVinculados > 0)
+                        monto = manualAmount + auto;
+                    deduce = !isNeto;
+                }
+
+                s.Reglas.Add(new DiscountLineDto
+                {
+                    Id = rule.Id,
+                    Name = rule.Name,
+                    Tipo = rule.FixedAmount.HasValue ? "fija" : rule.Percentage.HasValue ? "porcentaje" : "vinculada",
+                    Porcentaje = rule.Percentage,
+                    Fijo = rule.FixedAmount,
+                    Monto = monto,
+                    Deduce = deduce,
+                    RequiereBruto = requiereBruto,
+                    GastosVinculados = gastosVinculados
+                });
+
+                if (deduce && monto.HasValue)
+                    s.Descuentos += monto.Value;
+            }
+
+            foreach (var s in sourcesById.Values)
+            {
+                if (s.Mode == IncomeSource.ModeNeto && s.GrossTotal.HasValue)
+                {
+                    var explicado = s.Reglas.Where(r => r.Monto.HasValue).Sum(r => r.Monto!.Value);
+                    var otros = (s.GrossTotal.Value - s.IngresosNeto) - explicado;
+                    s.OtrosSinDetallar = Math.Round(otros, 2);
+                    s.AvisoOtros = otros < 0;
+                }
+                // Neto real por fuente: puede ser negativo si los descuentos superan el ingreso.
+                // Solo se omite (null) cuando la fuente no tiene ingresos en el mes.
+                s.TieneIngresos = s.IngresosBruto > 0 || s.IngresosNeto > 0;
+                if (s.TieneIngresos)
+                {
+                    s.Neto = s.IngresosBruto - s.Descuentos + s.IngresosNeto;
+                    s.AvisoNeto = s.Neto < 0;
+                }
+                else
+                {
+                    s.Neto = null;
+                    s.AvisoNeto = false;
+                }
+            }
+
+            return new MonthDiscountsDto
+            {
+                Year = year,
+                Month = month,
+                Total = incomes.Sum(i => i.Amount),
+                Descuentos = sourcesById.Values.Where(s => s.Mode == IncomeSource.ModeBruto).Sum(s => s.Descuentos),
+                // Mes sin ingreso: se omite el neto (null). Con ingreso: suma de netos reales.
+                Neto = incomes.Count == 0 ? (decimal?)null : sourcesById.Values.Sum(s => s.Neto ?? 0m),
+                Fuentes = sourcesById.Values
+                    .Where(s => s.TieneIngresos || s.Reglas.Count > 0)
+                    .OrderBy(s => s.SourceId == syntheticSourceId).ThenBy(s => s.SourceName)
+                    .ToList()
+            };
+        }
+
+        private async Task<decimal> ExpenseRuleAssignmentAmountAsync(List<ExpenseRuleAssignment> assignments)
+        {
+            var total = 0m;
+            foreach (var a in assignments)
+            {
+                if (a.PagoCuotaId.HasValue)
+                {
+                    var cuota = await _context.PagosCuotas.FirstOrDefaultAsync(pc => pc.Id == a.PagoCuotaId.Value);
+                    if (cuota != null) total += cuota.MontoCuota;
+                }
+                else
+                {
+                    var expense = await _context.Expenses.IgnoreQueryFilters().FirstOrDefaultAsync(e => e.Id == a.ExpenseId);
+                    if (expense != null && !expense.IsDeleted) total += expense.Amount;
+                }
+            }
+            return total;
+        }
+
+        private static bool IsTaken(CandidateKey key, HashSet<int> excludedExpenseIds, HashSet<int> excludedCuotaIds)
+        {
+            if (key.PagoCuotaId.HasValue)
+                return excludedCuotaIds.Contains(key.PagoCuotaId.Value) || excludedExpenseIds.Contains(key.ExpenseId);
+            return excludedExpenseIds.Contains(key.ExpenseId);
+        }
+
+        private static bool Matches(DiscountRule rule, CandidateExpense cand)
+        {
+            if (rule.LinkedCategoryId.HasValue && cand.CategoryId != rule.LinkedCategoryId.Value)
+                return false;
+            if (!string.IsNullOrWhiteSpace(rule.LinkedDescription))
+            {
+                if (!Normalize(cand.Description).Contains(Normalize(rule.LinkedDescription), StringComparison.OrdinalIgnoreCase))
+                    return false;
+            }
+            return true;
+        }
+
+        private static string Normalize(string value)
+        {
+            var normalized = value.Normalize(NormalizationForm.FormD);
+            var sb = new StringBuilder();
+            foreach (var ch in normalized)
+                if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark)
+                    sb.Append(ch);
+            return sb.ToString().Normalize(NormalizationForm.FormC);
+        }
+
+        private static ExpenseRuleAssignmentDto MapAssignment(ExpenseRuleAssignment a)
+        {
+            return new ExpenseRuleAssignmentDto
+            {
+                Id = a.Id,
+                RuleId = a.RuleId,
+                ExpenseId = a.ExpenseId,
+                PagoCuotaId = a.PagoCuotaId,
+                Year = a.Year,
+                Month = a.Month
+            };
+        }
+
+        private (string? Error, int StatusCode) Validate(DiscountRule rule, IncomeSource source)
         {
             if (string.IsNullOrWhiteSpace(rule.Name) || rule.Name.Trim().Length < 2 || rule.Name.Trim().Length > 60)
-                return "El nombre debe tener entre 2 y 60 caracteres.";
+                return ("El nombre debe tener entre 2 y 60 caracteres.", 400);
 
             var hasPercentage = rule.Percentage.HasValue;
             var hasFixed = rule.FixedAmount.HasValue;
+            var isLinked = rule.LinkedCategoryId.HasValue || !string.IsNullOrWhiteSpace(rule.LinkedDescription);
 
-            if (hasPercentage == hasFixed)
-                return "Solo se puede indicar un porcentaje o un monto fijo.";
+            // Una regla es fija, porcentual o vinculada a gastos (mutuamente excluyentes).
+            if (isLinked)
+            {
+                if (hasPercentage || hasFixed)
+                    return ("Una regla vinculada a gastos no puede tener porcentaje ni monto fijo.", 400);
+            }
+            else if (hasPercentage == hasFixed)
+            {
+                return ("Solo se puede indicar un porcentaje o un monto fijo.", 400);
+            }
 
             if (hasPercentage)
             {
                 var pct = rule.Percentage!.Value;
                 if (pct <= 0 || pct >= 100)
-                    return "El porcentaje debe ser mayor a 0 y menor a 100.";
+                    return ("El porcentaje debe ser mayor a 0 y menor a 100.", 400);
                 if (decimal.Round(pct, 2) != pct)
-                    return "El porcentaje no puede tener más de 2 decimales.";
+                    return ("El porcentaje no puede tener más de 2 decimales.", 400);
             }
 
             if (hasFixed)
             {
                 var fixedAmount = rule.FixedAmount!.Value;
                 if (fixedAmount <= 0)
-                    return "El monto fijo debe ser mayor a cero.";
+                    return ("El monto fijo debe ser mayor a cero.", 400);
                 if (decimal.Round(fixedAmount, 2) != fixedAmount)
-                    return "El monto fijo no puede tener más de 2 decimales.";
+                    return ("El monto fijo no puede tener más de 2 decimales.", 400);
             }
 
-            return null;
+            var esBruto = string.Equals(source.Mode?.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase);
+
+            if (!esBruto && (isLinked || rule.IsExpected))
+                return (MsgLinkedOnlyBruto, 400);
+
+            if (rule.IsExpected && !isLinked)
+                return ("Las reglas esperadas deben vincularse a un gasto (categoría y/o descripción).", 400);
+
+            if (rule.LinkedCategoryId.HasValue)
+            {
+                var category = _context.Categories.IgnoreQueryFilters()
+                    .FirstOrDefault(c => c.Id == rule.LinkedCategoryId.Value);
+                if (category == null || !string.Equals(category.Type, "gasto", StringComparison.OrdinalIgnoreCase)
+                    || (category.UserId.HasValue && category.UserId.Value != rule.UserId))
+                    return (MsgLinkedCategoryInvalid, 404);
+            }
+
+            if (!string.IsNullOrWhiteSpace(rule.LinkedDescription))
+            {
+                var desc = rule.LinkedDescription.Trim();
+                if (desc.Length < 3 || desc.Length > 100)
+                    return ("La descripción vinculada debe tener entre 3 y 100 caracteres.", 400);
+                if (!LinkedDescriptionRx.IsMatch(desc))
+                    return ("La descripción vinculada contiene caracteres no permitidos.", 400);
+            }
+
+            return (null, 200);
         }
+
+        private readonly record struct CandidateKey(int ExpenseId, int? PagoCuotaId);
+
+        private readonly record struct CandidateExpense(CandidateKey Key, decimal Amount, int CategoryId, string Description);
     }
 }

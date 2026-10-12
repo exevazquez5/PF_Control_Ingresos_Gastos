@@ -5,9 +5,9 @@ import { MAX_AMOUNT_MESSAGE } from '../../utils/limits';
 import { todayInputDate } from '../../utils/date';
 
 const categories = [
-  { id: 1, name: 'Salario', type: 'ingreso', isSystem: true },
-  { id: 2, name: 'Alimentación', type: 'gasto', isSystem: true },
-  { id: 3, name: 'Freelance', type: 'ingreso', isSystem: true }
+  { id: 1, name: 'Salario', type: 'ingreso', isSystem: true, isLabor: true },
+  { id: 2, name: 'Alimentación', type: 'gasto', isSystem: true, isLabor: false },
+  { id: 3, name: 'Freelance', type: 'ingreso', isSystem: true, isLabor: true }
 ];
 
 function renderModal({ formData = {}, incomeSources = [], ...props } = {}) {
@@ -63,7 +63,7 @@ describe('TransactionModal', () => {
     expect(screen.queryByText('Se repite todos los meses')).not.toBeInTheDocument();
   });
 
-  it('ofrece el campo Bruto solo con categoría laboral en ingresos (D4)', () => {
+  it('ofrece el campo Bruto solo con categoría laboral en modo Neto (D4)', () => {
     renderModal({ formData: { categoryId: 1 } });
     expect(screen.getByText('+ Bruto del recibo (opcional)')).toBeInTheDocument();
 
@@ -77,6 +77,12 @@ describe('TransactionModal', () => {
 
     renderModal({ formData: { type: 'gasto', categoryId: 2 } });
     expect(screen.queryByText('+ Bruto del recibo (opcional)')).not.toBeInTheDocument();
+  });
+
+  it('oculta el campo Bruto en modo Bruto incluso con categoría laboral (3.5a)', () => {
+    renderModal({ formData: { mode: 'bruto', categoryId: 1 } });
+    expect(screen.queryByText('+ Bruto del recibo (opcional)')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Bruto del recibo/)).not.toBeInTheDocument();
   });
 
   it('muestra el límite de 10M con el literal del backend y deshabilita el botón (D5)', () => {
@@ -137,19 +143,23 @@ describe('TransactionModal', () => {
     }));
   });
 
-  it('modo bruto muestra el bruto obligatorio y deshabilita el botón (D1)', () => {
+  it('modo bruto no pide el bruto del recibo y habilita el botón (3.5a)', () => {
     renderModal({ formData: { mode: 'bruto' } });
 
-    expect(screen.getByText(/Bruto del recibo/)).toBeInTheDocument();
-    expect(screen.getByText('En modo bruto el bruto del recibo es obligatorio.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Agregar' })).toBeDisabled();
-  });
-
-  it('modo bruto con bruto cargado habilita el botón (D1)', () => {
-    renderModal({ formData: { mode: 'bruto', grossAmount: '1500' } });
-
+    expect(screen.queryByText(/Bruto del recibo/)).not.toBeInTheDocument();
     expect(screen.queryByText('En modo bruto el bruto del recibo es obligatorio.')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Agregar' })).toBeEnabled();
+  });
+
+  it('incomeFields nunca envía grossAmount en modo bruto (3.5a)', async () => {
+    const { incomeFields } = await import('../../utils/transactionService');
+
+    expect(incomeFields({
+      type: 'ingreso', amount: '10', grossAmount: '1500', isRecurring: false,
+      sourceId: 3, sourceName: '', mode: 'bruto'
+    })).toEqual({
+      grossAmount: null, isRecurring: false, sourceId: 3, sourceName: null, mode: 'bruto'
+    });
   });
 
   it('incomeFields envía sourceId/sourceName/mode solo para ingresos', async () => {

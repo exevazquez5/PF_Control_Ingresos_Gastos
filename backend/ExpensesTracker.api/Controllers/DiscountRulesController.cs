@@ -44,6 +44,8 @@ namespace ExpensesTracker.api.Controllers
                 Name = dto.Name,
                 Percentage = dto.Percentage,
                 FixedAmount = dto.FixedAmount,
+                LinkedCategoryId = dto.LinkedCategoryId,
+                LinkedDescription = dto.LinkedDescription,
                 IsExpected = dto.IsExpected
             };
 
@@ -84,6 +86,8 @@ namespace ExpensesTracker.api.Controllers
                 Name = dto.Name,
                 Percentage = dto.Percentage,
                 FixedAmount = dto.FixedAmount,
+                LinkedCategoryId = dto.LinkedCategoryId,
+                LinkedDescription = dto.LinkedDescription,
                 IsExpected = dto.IsExpected
             };
 
@@ -120,6 +124,54 @@ namespace ExpensesTracker.api.Controllers
             return NoContent();
         }
 
+        [HttpPost("{id}/assign")]
+        [Authorize]
+        public async Task<ActionResult<ExpenseRuleAssignmentDto>> Assign(int id, [FromBody] AssignExpenseDto dto)
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized("Token inválido.");
+
+            try
+            {
+                var assignment = await _discountRuleService.AssignExpenseAsync(userId.Value, id, dto);
+                return Ok(assignment);
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(ex.Message);
+            }
+        }
+
+        [HttpDelete("{id}/assign")]
+        [Authorize]
+        public async Task<IActionResult> Unassign(int id, [FromQuery] int expenseId, [FromQuery] int? pagoCuotaId)
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized("Token inválido.");
+
+            var removed = await _discountRuleService.UnassignExpenseAsync(userId.Value, id, expenseId, pagoCuotaId);
+            if (!removed) return NotFound("La asignación no existe.");
+
+            return NoContent();
+        }
+
+        [HttpGet("totals")]
+        [Authorize]
+        public async Task<ActionResult<MonthDiscountsDto>> GetTotals([FromQuery] int year, [FromQuery] int month)
+        {
+            var userId = GetUserId();
+            if (userId == null) return Unauthorized("Token inválido.");
+
+            if (year < 2000 || year > 2100 || month < 1 || month > 12)
+                return BadRequest("El período indicado no es válido.");
+
+            return Ok(await _discountRuleService.ComputeMonthDiscountsAsync(userId.Value, year, month));
+        }
+
         private static DiscountRuleDto Map(Models.DiscountRule rule)
         {
             return new DiscountRuleDto
@@ -128,9 +180,13 @@ namespace ExpensesTracker.api.Controllers
                 UserId = rule.UserId,
                 IncomeSourceId = rule.IncomeSourceId,
                 IncomeSourceName = rule.IncomeSource?.Name,
+                IncomeSourceMode = rule.IncomeSource?.Mode,
                 Name = rule.Name,
                 Percentage = rule.Percentage,
                 FixedAmount = rule.FixedAmount,
+                LinkedCategoryId = rule.LinkedCategoryId,
+                LinkedCategoryName = rule.LinkedCategory?.Name,
+                LinkedDescription = rule.LinkedDescription,
                 IsExpected = rule.IsExpected,
                 IsArchived = rule.IsArchived,
                 CreatedAt = rule.CreatedAt

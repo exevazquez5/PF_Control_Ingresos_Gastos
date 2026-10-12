@@ -51,7 +51,7 @@ public class DiscountRuleTests : IClassFixture<TestingApiFactory>
             incomeSourceId = sourceId,
             name = "Obra social",
             fixedAmount = 2500m,
-            isExpected = true,
+            isExpected = false,
             userId = TestingApiFactory.UserA
         });
         Assert.Equal(HttpStatusCode.Created, fija.StatusCode);
@@ -61,7 +61,7 @@ public class DiscountRuleTests : IClassFixture<TestingApiFactory>
             incomeSourceId = sourceId,
             name = "Jubilación",
             percentage = 11m,
-            isExpected = true,
+            isExpected = false,
             userId = TestingApiFactory.UserA
         });
         Assert.Equal(HttpStatusCode.Created, porcentaje.StatusCode);

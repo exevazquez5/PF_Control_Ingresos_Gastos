@@ -251,14 +251,13 @@ namespace ExpensesTracker.api.Controllers
             if (mode != Models.IncomeSource.ModeNeto && mode != Models.IncomeSource.ModeBruto)
                 return BadRequest("El modo debe ser \"neto\" o \"bruto\".");
 
-            // En modo bruto el bruto del recibo es obligatorio (D1/D4)
-            if (mode == Models.IncomeSource.ModeBruto && !dto.GrossAmount.HasValue)
-                return BadRequest("El modo bruto requiere indicar el bruto del recibo.");
+            // En modo bruto no aplica el bruto del recibo (3.5a): lo depositado ES el bruto.
+            var grossAmount = mode == Models.IncomeSource.ModeBruto ? (decimal?)null : dto.GrossAmount;
 
             var income = new Models.Income
             {
                 Amount = dto.Amount,
-                GrossAmount = dto.GrossAmount,
+                GrossAmount = grossAmount,
                 IsRecurring = dto.IsRecurring,
                 Description = dto.Description,
                 Date = dto.Date,
@@ -356,9 +355,8 @@ namespace ExpensesTracker.api.Controllers
             if (mode != Models.IncomeSource.ModeNeto && mode != Models.IncomeSource.ModeBruto)
                 return BadRequest("El modo debe ser \"neto\" o \"bruto\".");
 
-            // En modo bruto el bruto del recibo es obligatorio (D1/D4)
-            if (mode == Models.IncomeSource.ModeBruto && !dto.GrossAmount.HasValue)
-                return BadRequest("El modo bruto requiere indicar el bruto del recibo.");
+            // En modo bruto no aplica el bruto del recibo (3.5a): lo depositado ES el bruto.
+            var grossAmount = mode == Models.IncomeSource.ModeBruto ? (decimal?)null : dto.GrossAmount;
 
             var isAdmin = User.IsInRole("Admin");
 
@@ -366,7 +364,7 @@ namespace ExpensesTracker.api.Controllers
                 return StatusCode(403, "No puedes modificar ingresos de otro usuario.");
 
             incomeToUpdate.Amount = dto.Amount;
-            incomeToUpdate.GrossAmount = dto.GrossAmount;
+            incomeToUpdate.GrossAmount = grossAmount;
             incomeToUpdate.IsRecurring = dto.IsRecurring;
             incomeToUpdate.Description = dto.Description;
             incomeToUpdate.Date = dto.Date;

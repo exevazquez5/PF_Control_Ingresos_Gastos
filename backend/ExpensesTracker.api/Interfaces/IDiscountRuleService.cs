@@ -1,3 +1,4 @@
+using ExpensesTracker.api.Dtos.DiscountRule;
 using ExpensesTracker.api.Models;
 
 namespace ExpensesTracker.api.Interfaces
@@ -10,5 +11,8 @@ namespace ExpensesTracker.api.Interfaces
         Task<(bool Ok, string? Error, int StatusCode)> UpdateAsync(DiscountRule rule);
         Task<bool> ArchiveAsync(int userId, int id);
         Task<bool> RestoreAsync(int userId, int id);
+        Task<ExpenseRuleAssignmentDto> AssignExpenseAsync(int userId, int ruleId, AssignExpenseDto dto);
+        Task<bool> UnassignExpenseAsync(int userId, int ruleId, int expenseId, int? pagoCuotaId);
+        Task<MonthDiscountsDto> ComputeMonthDiscountsAsync(int userId, int year, int month);
     }
 }

@@ -58,7 +58,7 @@ public class IncomeSourceSnapshotTests : IClassFixture<TestingApiFactory>
     }
 
     [Fact]
-    public async Task Create_FuenteBruto_SinBruto_Returns400()
+    public async Task Create_FuenteBruto_SinBruto_SeGuardaComoBruto_3_5a()
     {
         var client = UserAClient();
         var sourceId = await CreateSourceAsync(client, "Empresa SNAP-BRUTO", "bruto");
@@ -74,12 +74,15 @@ public class IncomeSourceSnapshotTests : IClassFixture<TestingApiFactory>
             userId = TestingApiFactory.UserA
         });
 
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("El modo bruto requiere indicar el bruto del recibo.", await response.Content.ReadAsStringAsync());
+        // 3.5a: en modo Bruto lo depositado ES el bruto → no se exige ni se guarda GrossAmount.
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("bruto", doc.RootElement.GetProperty("mode").GetString());
+        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("grossAmount").ValueKind);
     }
 
     [Fact]
-    public async Task Create_FuenteBruto_ConBruto_SnapshoteaBruto_D1()
+    public async Task Create_FuenteBruto_ConBruto_LoDescarta_3_5a()
     {
         var client = UserAClient();
         var sourceId = await CreateSourceAsync(client, "Empresa SNAP-BRUTO2", "bruto");
@@ -96,10 +99,11 @@ public class IncomeSourceSnapshotTests : IClassFixture<TestingApiFactory>
             userId = TestingApiFactory.UserA
         });
 
+        // 3.5a: en modo Bruto se ignora el GrossAmount del recibo (lo depositado es el bruto).
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         using var doc = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("bruto", doc.RootElement.GetProperty("mode").GetString());
-        Assert.Equal(1400m, doc.RootElement.GetProperty("grossAmount").GetDecimal());
+        Assert.Equal(JsonValueKind.Null, doc.RootElement.GetProperty("grossAmount").ValueKind);
     }
 
     [Fact]

@@ -98,8 +98,8 @@ export default function TransactionModal({
                   const cat = categories.find(c => c.id === id);
                   const laboral = isLaborCategory(cat);
                   const next = { ...formData, categoryId: id };
-                  // El bruto no se limpia en modo bruto (es obligatorio, D1)
-                  if (!laboral && formData.mode !== "bruto") {
+                  // El bruto (opcional, solo en modo Neto) solo aplica a categorías laborales.
+                  if (!laboral) {
                     next.grossAmount = "";
                     setShowGross(false);
                   }
@@ -140,7 +140,15 @@ export default function TransactionModal({
                         key={opt.value}
                         type="button"
                         aria-label={`Modo ${opt.value}`}
-                        onClick={() => setFormData({ ...formData, mode: opt.value })}
+                        onClick={() => {
+                          const nextMode = opt.value;
+                          setFormData({
+                            ...formData,
+                            mode: nextMode,
+                            grossAmount: nextMode === "bruto" ? "" : formData.grossAmount
+                          });
+                          if (nextMode === "bruto") setShowGross(false);
+                        }}
                         className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
                           (formData.mode || 'neto') === opt.value
                             ? 'bg-blue-100 border-blue-500 text-blue-700 dark:bg-blue-900 dark:text-blue-300 dark:border-blue-600'
@@ -152,7 +160,7 @@ export default function TransactionModal({
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    El monto guardado siempre es lo depositado. En modo bruto se pide además el bruto del recibo.
+                    El monto guardado siempre es lo depositado. En modo Bruto lo depositado es el monto bruto del recibo (sin descuentos).
                   </p>
                 </div>
               </div>
@@ -185,10 +193,11 @@ export default function TransactionModal({
               )}
             </div>
 
-            {/* Bruto del recibo (D4/D1): obligatorio en modo bruto; opcional en neto con categoría laboral */}
-            {formData.type === "ingreso" && (formData.mode === "bruto" || isLaborCategory(categories.find(c => c.id === formData.categoryId))) && (
+            {/* Bruto del recibo (D4): solo en modo Neto + categoría laboral, opcional.
+                En modo Bruto lo depositado ES el bruto → no se pide ni se guarda. */}
+            {formData.type === "ingreso" && formData.mode === "neto" && isLaborCategory(categories.find(c => c.id === formData.categoryId)) && (
               <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3">
-                {!(showGross || formData.mode === "bruto") ? (
+                {!showGross ? (
                   <button
                     type="button"
                     onClick={() => setShowGross(true)}
@@ -201,17 +210,17 @@ export default function TransactionModal({
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-sm font-medium text-gray-700 dark:text-white">
                         Bruto del recibo
-                        {formData.mode === "bruto" && <span className="text-red-500"> *</span>}
                       </label>
-                      {formData.mode !== "bruto" && (
-                        <button
-                          type="button"
-                          onClick={() => setShowGross(false)}
-                          className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                        >
-                          Ocultar
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowGross(false);
+                          setFormData({ ...formData, grossAmount: "" });
+                        }}
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                      >
+                        Ocultar
+                      </button>
                     </div>
                     <CurrencyInput
                       value={formData.grossAmount || ''}
@@ -220,11 +229,11 @@ export default function TransactionModal({
                       placeholder="0,00"
                     />
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                      Monto bruto antes de descuentos (jubilación, prepaga, etc.).
+                      Monto bruto antes de descuentos (jubilación, prepaga, etc.). Opcional.
                     </p>
-                    {formData.mode === "bruto" && !formData.grossAmount && (
+                    {formData.grossAmount && Number(formData.grossAmount) < Number(formData.amount) && (
                       <p className="text-xs text-red-500 mt-1">
-                        En modo bruto el bruto del recibo es obligatorio.
+                        El bruto debe ser mayor o igual al monto depositado.
                       </p>
                     )}
                   </>
@@ -425,10 +434,7 @@ export default function TransactionModal({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={
-                  Number(formData.amount) > MAX_TRANSACTION_AMOUNT ||
-                  (formData.type === "ingreso" && formData.mode === "bruto" && !formData.grossAmount)
-                }
+                disabled={Number(formData.amount) > MAX_TRANSACTION_AMOUNT}
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editingTransaction ? "Actualizar" : "Agregar"}
