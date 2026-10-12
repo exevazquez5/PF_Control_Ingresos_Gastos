@@ -16,6 +16,7 @@ namespace ExpensesTracker.api.Data
         public DbSet<IncomeSource> IncomeSources { get; set; }
         public DbSet<IncomeSourceAlias> IncomeSourceAliases { get; set; }
         public DbSet<DiscountRule> DiscountRules { get; set; }
+        public DbSet<ExpenseRuleAssignment> ExpenseRuleAssignments { get; set; }
         public DbSet<PasswordResetToken> PasswordResetTokens { get; set; }
 
         public DbSet<PagoCuota> PagosCuotas { get; set; }
@@ -140,6 +141,43 @@ namespace ExpensesTracker.api.Data
 
             modelBuilder.Entity<DiscountRule>()
                 .HasQueryFilter(r => !r.IsArchived);
+
+            modelBuilder.Entity<DiscountRule>()
+                .HasOne(r => r.LinkedCategory)
+                .WithMany()
+                .HasForeignKey(r => r.LinkedCategoryId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ExpenseRuleAssignment>()
+                .HasOne(a => a.User)
+                .WithMany()
+                .HasForeignKey(a => a.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ExpenseRuleAssignment>()
+                .HasOne(a => a.Rule)
+                .WithMany()
+                .HasForeignKey(a => a.RuleId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ExpenseRuleAssignment>()
+                .HasOne(a => a.Expense)
+                .WithMany()
+                .HasForeignKey(a => a.ExpenseId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ExpenseRuleAssignment>()
+                .HasIndex(a => a.ExpenseId)
+                .IsUnique()
+                .HasFilter("pagocuotaid IS NULL");
+
+            modelBuilder.Entity<ExpenseRuleAssignment>()
+                .HasIndex(a => a.PagoCuotaId)
+                .IsUnique()
+                .HasFilter("pagocuotaid IS NOT NULL");
+
+            modelBuilder.Entity<ExpenseRuleAssignment>()
+                .HasIndex(a => new { a.RuleId, a.Year, a.Month });
 
             modelBuilder.Entity<Income>()
                 .HasOne(i => i.Source)

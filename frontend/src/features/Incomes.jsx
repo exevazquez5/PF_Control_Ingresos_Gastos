@@ -54,6 +54,7 @@ export default function IncomesDashboard() {
   const [incomeSources, setIncomeSources] = useState([]);
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [monthDiscounts, setMonthDiscounts] = useState(null);
 
   const [monthOffset, setMonthOffset]   = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("Todos"); 
@@ -83,6 +84,18 @@ export default function IncomesDashboard() {
       setIncomeSources(response.data);
     } catch (error) {
       console.error("Error al obtener fuentes de ingreso:", error);
+    }
+  };
+
+  // Desglose de descuentos del mes (Fase 3.5a): Total (bruto) − descuentos = Neto.
+  const fetchMonthDiscounts = async (token, year, month) => {
+    try {
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      const response = await api.get(`/DiscountRules/totals?year=${year}&month=${month}`, config);
+      setMonthDiscounts(response.data);
+    } catch (error) {
+      console.error("Error al obtener los descuentos del mes:", error);
+      setMonthDiscounts(null);
     }
   };
 
@@ -130,16 +143,24 @@ export default function IncomesDashboard() {
     setExpandedMonthKey(monthLabelKey(selMonth));
   }, [monthOffset]);
 
+  // Cargar descuentos del mes seleccionado (Fase 3.5a)
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token || !userId) return;
+    fetchMonthDiscounts(token, selMonth.getFullYear(), selMonth.getMonth() + 1);
+  }, [monthOffset, userId]);
+
   // KPIs del mes seleccionado
   const monthTotal = sumIncomes(monthTransactions);
   const monthCount = monthTransactions.length;
-
-  // Promedio mensual histórico (meses con ingresos)
-  const monthsWithIncome = new Set(transactions.map(t => {
-    const d = parseApiDate(t.date);
-    return `${d.getFullYear()}-${d.getMonth()}`;
-  })).size;
-  const monthlyAverage = monthsWithIncome > 0 ? sumIncomes(transactions) / monthsWithIncome : 0;
+  const monthDescuentos = monthDiscounts?.descuentos ?? 0;
+  // Neto puede ser null en meses sin ingreso (se omite). Puede ser negativo si
+  // los descuentos superan el ingreso del mes.
+  const monthNeto = monthDiscounts ? monthDiscounts.neto : undefined;
+  // Fuentes con reglas o descuentos para el desglose por fuente
+  const fuentesConDesglose = (monthDiscounts?.fuentes || []).filter(
+    f => (f.reglas?.length > 0) || f.descuentos > 0 || f.otrosSinDetallar != null
+  );
 
   const categoryColorMap = categories.reduce((acc, cat, index) => {
       acc[cat.id] = getDistinctColor(index);
@@ -409,16 +430,45 @@ export default function IncomesDashboard() {
         </div>
 
         {/* KPIs del mes seleccionado */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 border-l-4 border-green-500 flex items-center gap-4">
             <div className="bg-green-100 dark:bg-green-900 p-3 rounded-lg flex-shrink-0">
               <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Total del mes</p>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Total del mes (bruto)</p>
               <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 truncate">
                 {formatCurrency(monthTotal)}
               </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 border-l-4 border-rose-500 flex items-center gap-4">
+            <div className="bg-rose-100 dark:bg-rose-900 p-3 rounded-lg flex-shrink-0">
+              <TrendingUp className="w-6 h-6 text-rose-600 dark:text-rose-400 rotate-180" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Descuentos del mes</p>
+              <p className="text-xl sm:text-2xl font-bold text-rose-600 dark:text-rose-400 truncate">
+                {formatCurrency(monthDescuentos)}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 border-l-4 border-emerald-500 flex items-center gap-4">
+            <div className="bg-emerald-100 dark:bg-emerald-900 p-3 rounded-lg flex-shrink-0">
+              <DollarSign className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Neto del mes</p>
+              <p className={`text-xl sm:text-2xl font-bold truncate ${monthNeto != null && monthNeto < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                {monthNeto != null ? formatCurrency(monthNeto) : '—'}
+              </p>
+              {monthNeto == null ? (
+                <p className="text-xs text-gray-400 dark:text-gray-500">Sin ingresos este mes</p>
+              ) : monthNeto < 0 ? (
+                <p className="text-xs text-rose-600 dark:text-rose-400">Los descuentos superan el ingreso del mes</p>
+              ) : null}
             </div>
           </div>
 
@@ -433,19 +483,100 @@ export default function IncomesDashboard() {
               </p>
             </div>
           </div>
+        </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 border-l-4 border-purple-500 flex items-center gap-4">
-            <div className="bg-purple-100 dark:bg-purple-900 p-3 rounded-lg flex-shrink-0">
-              <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Promedio mensual</p>
-              <p className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400 truncate">
-                {formatCurrency(monthlyAverage)}
-              </p>
+        {/* Estado vacío: sin fuentes de ingreso (Fase 3.5a) */}
+        {!loading && incomeSources.length === 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6 mb-6 text-center border border-dashed border-blue-300 dark:border-blue-800">
+            <h3 className="text-lg font-bold text-gray-800 dark:text-white mb-1">
+              Todavía no tenés fuentes de ingreso
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Creá la primera fuente para empezar a registrar ingresos, descuentos y reglas.
+            </p>
+            <button
+              onClick={() => {
+                resetForm();
+                setShowModal(true);
+              }}
+              className="bg-blue-600 text-white px-5 py-2.5 rounded-lg font-medium hover:bg-blue-700 transition-colors"
+            >
+              Crear la primera fuente
+            </button>
+          </div>
+        )}
+
+        {/* Desglose de descuentos por fuente (Fase 3.5a) */}
+        {fuentesConDesglose.length > 0 && (
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mb-6">
+            <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white mb-1">
+              Descuentos por fuente
+            </h3>
+            <p className="text-sm text-gray-500 dark:text-gray-300 mb-4 capitalize">{selMonthLabel}</p>
+            <div className="space-y-3">
+              {fuentesConDesglose.map(fuente => (
+                <div key={fuente.sourceId} className="border border-gray-200 dark:border-gray-700 rounded-xl p-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-gray-800 dark:text-white">{fuente.sourceName}</span>
+                      <span className="text-[11px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">
+                        {fuente.mode}
+                      </span>
+                    </div>
+                    <span className="text-sm font-bold text-rose-600 dark:text-rose-400">
+                      -{formatCurrency(fuente.descuentos)}
+                    </span>
+                  </div>
+                  {!fuente.tieneIngresos ? (
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      Sin ingreso este mes: las reglas se muestran a modo informativo y no entran en el neto.
+                    </p>
+                  ) : (
+                    <div className="mt-2 space-y-1">
+                      {(fuente.reglas || []).map(regla => (
+                        <div key={regla.id} className="flex items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-300">
+                          <span className="truncate">
+                            {regla.name}
+                            {!regla.deduce && <span className="text-gray-400 dark:text-gray-500"> (informativa)</span>}
+                          </span>
+                          <span className="whitespace-nowrap">
+                            {regla.requiereBruto
+                              ? 'requiere el bruto del recibo'
+                              : formatCurrency(regla.monto || 0)}
+                          </span>
+                        </div>
+                      ))}
+                      {fuente.otrosSinDetallar != null && (
+                        <div className="flex items-center justify-between gap-2 text-sm text-gray-500 dark:text-gray-400">
+                          <span className="truncate">
+                            Otros / sin detallar{fuente.avisoOtros ? ' (revisar)' : ''}
+                          </span>
+                          <span className="whitespace-nowrap">{formatCurrency(fuente.otrosSinDetallar)}</span>
+                        </div>
+                      )}
+                      {fuente.ingresosBruto === 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Sin ingresos en modo Bruto este mes: los descuentos no se aplican.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-gray-100 dark:border-gray-700 text-sm">
+                    <span className="text-gray-500 dark:text-gray-400">Neto de la fuente</span>
+                    <span className={`font-bold ${fuente.neto != null && fuente.neto < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {fuente.neto != null ? formatCurrency(fuente.neto) : '—'}
+                    </span>
+                  </div>
+                  {fuente.avisoNeto && (
+                    <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
+                      Los descuentos superan el ingreso del mes
+                    </p>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        </div>
+        )}
 
         {/* Distribución por categoría del mes seleccionado */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mb-6">

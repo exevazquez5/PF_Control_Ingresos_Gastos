@@ -18,7 +18,7 @@ export default function CategoriesSettings({ isOpen, onClose }) {
   const [archivedCategories, setArchivedCategories] = useState([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
-  const [form, setForm] = useState({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "" });
+  const [form, setForm] = useState({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "", isLabor: false });
   const [error, setError] = useState("");
   const [expandedParents, setExpandedParents] = useState({});
 
@@ -51,8 +51,9 @@ export default function CategoriesSettings({ isOpen, onClose }) {
         parentCategoryId: form.parentCategoryId || null,
         icon: form.icon || null,
         color: form.color || null,
+        isLabor: form.type === "ingreso" ? !!form.isLabor : false,
       });
-      setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "" });
+      setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "", isLabor: false });
       setShowCreateModal(false);
       loadData();
     } catch (err) {
@@ -74,9 +75,10 @@ export default function CategoriesSettings({ isOpen, onClose }) {
         parentCategoryId: form.parentCategoryId || null,
         icon: form.icon || editingCategory.icon,
         color: form.color || editingCategory.color,
+        isLabor: form.type === "ingreso" ? !!form.isLabor : false,
       });
       setEditingCategory(null);
-      setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "" });
+      setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "", isLabor: false });
       loadData();
     } catch (err) {
       setError(err.response?.data || "Error al actualizar categoría");
@@ -109,12 +111,13 @@ export default function CategoriesSettings({ isOpen, onClose }) {
       parentCategoryId: cat.parentCategoryId,
       icon: cat.icon || "",
       color: cat.color || "",
+      isLabor: !!cat.isLabor,
     });
   };
 
   const cancelEdit = () => {
     setEditingCategory(null);
-    setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "" });
+    setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "", isLabor: false });
   };
 
   const toggleParent = (id) => {
@@ -212,7 +215,7 @@ export default function CategoriesSettings({ isOpen, onClose }) {
                 <button
                   onClick={() => {
                     setEditingCategory(null);
-                    setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "" });
+                    setForm({ name: "", type: "gasto", parentCategoryId: null, icon: "", color: "", isLabor: false });
                     setShowCreateModal(true);
                   }}
                   className="flex items-center gap-1 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700"
@@ -331,7 +334,10 @@ export default function CategoriesSettings({ isOpen, onClose }) {
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Tipo</label>
                   <select
                     value={form.type}
-                    onChange={e => setForm({ ...form, type: e.target.value })}
+                    onChange={e => {
+                      const nextType = e.target.value;
+                      setForm({ ...form, type: nextType, isLabor: nextType === "ingreso" ? form.isLabor : false });
+                    }}
                     className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white"
                   >
                     <option value="gasto">Gasto</option>
@@ -353,6 +359,17 @@ export default function CategoriesSettings({ isOpen, onClose }) {
                       ))}
                   </select>
                 </div>
+                {form.type === "ingreso" && (
+                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={!!form.isLabor}
+                      onChange={e => setForm({ ...form, isLabor: e.target.checked })}
+                      className="form-checkbox h-4 w-4 text-blue-600"
+                    />
+                    <span>Categoría laboral (habilita el bruto del recibo)</span>
+                  </label>
+                )}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Icono</label>
                   <div className="flex flex-wrap gap-1">
