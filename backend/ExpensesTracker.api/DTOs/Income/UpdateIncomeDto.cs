@@ -16,6 +16,8 @@ namespace ExpensesTracker.api.Dtos.Income
         public DateTime Date { get; set; }
         [Required]
         public int CategoryId { get; set; }
+        public int? SourceId { get; set; }
+        public string? Mode { get; set; }
         [Required]
         public int UserId { get; set; }
     }

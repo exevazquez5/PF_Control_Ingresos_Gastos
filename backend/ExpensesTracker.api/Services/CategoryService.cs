@@ -28,6 +28,13 @@ public class CategoryService : ICategoryService
         ("Otros ingresos", "ingreso"),
     };
 
+    // Categorías de ingreso con naturaleza laboral (join explícito, reemplaza la heurística de nombres)
+    private static readonly HashSet<string> LaborCategoryNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Salario",
+        "Freelance"
+    };
+
     public CategoryService(AppDbContext context)
     {
         _context = context;
@@ -173,17 +180,18 @@ public class CategoryService : ICategoryService
         if (existingSystemCategories.Any())
             return;
 
-        foreach (var (name, type) in DefaultSystemCategories)
-        {
-            _context.Categories.Add(new Category
+            foreach (var (name, type) in DefaultSystemCategories)
             {
-                Name = name,
-                Type = type,
-                IsSystem = true,
-                UserId = null,
-                CreatedAt = DateTime.UtcNow
-            });
-        }
+                _context.Categories.Add(new Category
+                {
+                    Name = name,
+                    Type = type,
+                    IsSystem = true,
+                    IsLabor = type == "ingreso" && LaborCategoryNames.Contains(name),
+                    UserId = null,
+                    CreatedAt = DateTime.UtcNow
+                });
+            }
 
         await _context.SaveChangesAsync();
     }

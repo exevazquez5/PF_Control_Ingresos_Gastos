@@ -77,9 +77,19 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 - Selector de mes global con botón "Hoy" → KPIs del mes seleccionado: **total**, **cantidad de ingresos** y **promedio mensual histórico** (total ÷ meses con ingresos).
 - Distribución por categoría (torta + leyenda) del mes seleccionado.
 - **Historial agrupado por mes** (expandible): del primer ingreso hasta el mes actual; los meses vacíos se muestran como "Sin ingresos" (no se listan meses anteriores al primer ingreso).
-- Cada ingreso muestra su **fuente derivada** de la descripción (`utils/sourceKey.js`: sin fechas, números ni nombres de mes); se persistirá como entidad propia en una fase siguiente.
+- Cada ingreso muestra su **fuente persistida** (`IncomeSource`); en filas legadas se deriva de la descripción (`utils/sourceKey.js`).
 - Filtro por categoría y orden se aplican dentro de cada mes expandido; los totales de mes/KPIs nunca se filtran.
 - Totales compartidos con el Dashboard vía `utils/transactionTotals.js` (`sumIncomes`/`sumExpenses`/`filterByMonth`): "Total Gastos" incluye cuotas en ambos lados.
+
+## Fuentes de ingreso y reglas de descuento (Fase 3)
+
+- **`IncomeSource`** (por usuario, única por nombre): el formulario de ingresos tiene un autocompletado ("Fuente"); al elegirla se snapshottea su **modo** (`neto` | `bruto`) en el ingreso (D1). Si se tipea un nombre nuevo, el backend lo resuelve por alias o crea la fuente al guardar.
+- **Renombrar/fusionar como alias (D11)**: `PUT /api/IncomeSources/{id}` deja el nombre anterior como alias (el autocomplete lo encuentra igual); `POST /api/IncomeSources/merge` reasigna ingresos, reglas y aliases al sobreviviente y borra la fuente vieja.
+- **`DiscountRule`** (por fuente): reglas fijas o en % (`exactly one`), con `isExpected` para los estados Pendiente/Incompleto del cierre de mes (D2). CRUD en `/api/DiscountRules`.
+- **Modo bruto (D1/D4)**: en modo `bruto` el campo "Bruto del recibo" es obligatorio; en `neto` es opcional y solo se ofrece con categoría laboral. El monto guardado siempre es lo depositado; el bruto va en `grossAmount` (validado `bruto >= depositado`).
+- **`GET /api/Incomes/overview`**: meses desde el primer ingreso hasta el actual (vacíos intermedios incluidos, D7) con `total`, `grossTotal`, desglose por fuente (fallback a categoría, D6) y por categoría. Alimentará el gráfico apilado y las proyecciones (Fase 4).
+- **Categorías laborales**: `Category.isLabor` (join explícito, reemplaza la heurística de nombres); la migración marca Salario y Freelance.
+- Tests: `IncomeSourceTests`, `DiscountRuleTests`, `IncomeSourceSnapshotTests`, `IncomeOverviewTests` (59 backend / 16 frontend con vitest).
 
 ## Estructura
 
@@ -93,7 +103,7 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 ├── backend/ExpensesTracker.api/
 │   ├── Controllers/  Services/  Models/  DTOs/  Data/  Migrations/
 ├── backend/ExpensesTracker.api.Tests/   # tests de integración (xUnit, WebApplicationFactory, SQLite)
-├── .github/workflows/ci.yml      # build backend (.NET) + tests (xUnit) + frontend (Vite)
+├── .github/workflows/ci.yml      # build backend (.NET) + tests (xUnit) + frontend (Vite + vitest)
 ├── docker-compose.yml            # servicios: db + backend + nginx
 ├── dev.ps1                       # stack DEV local completo
 ├── backup-prod.ps1               # respaldo de PROD (pg_dump)

@@ -148,6 +148,10 @@ namespace ExpensesTracker.api.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("isarchived");
 
+                    b.Property<bool>("IsLabor")
+                        .HasColumnType("boolean")
+                        .HasColumnName("islabor");
+
                     b.Property<bool>("IsSystem")
                         .HasColumnType("boolean")
                         .HasColumnName("issystem");
@@ -224,6 +228,65 @@ namespace ExpensesTracker.api.Migrations
                         .HasDatabaseName("ix_creditcards_userid");
 
                     b.ToTable("creditcards", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.DiscountRule", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("archivedat");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<decimal?>("FixedAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("fixedamount");
+
+                    b.Property<int>("IncomeSourceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("incomesourceid");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("isarchived");
+
+                    b.Property<bool>("IsExpected")
+                        .HasColumnType("boolean")
+                        .HasColumnName("isexpected");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal?>("Percentage")
+                        .HasColumnType("numeric")
+                        .HasColumnName("percentage");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_discountrules");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_discountrules_userid");
+
+                    b.HasIndex("IncomeSourceId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_discountrules_incomesourceid_name");
+
+                    b.ToTable("discountrules", (string)null);
                 });
 
             modelBuilder.Entity("ExpensesTracker.api.Models.Expense", b =>
@@ -337,6 +400,14 @@ namespace ExpensesTracker.api.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("isrecurring");
 
+                    b.Property<string>("Mode")
+                        .HasColumnType("text")
+                        .HasColumnName("mode");
+
+                    b.Property<int?>("SourceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("sourceid");
+
                     b.Property<int>("UserId")
                         .HasColumnType("integer")
                         .HasColumnName("userid");
@@ -347,10 +418,97 @@ namespace ExpensesTracker.api.Migrations
                     b.HasIndex("CategoryId")
                         .HasDatabaseName("ix_incomes_categoryid");
 
+                    b.HasIndex("SourceId")
+                        .HasDatabaseName("ix_incomes_sourceid");
+
                     b.HasIndex("UserId")
                         .HasDatabaseName("ix_incomes_userid");
 
                     b.ToTable("incomes", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.IncomeSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("archivedat");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("isarchived");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("mode");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_incomesources");
+
+                    b.HasIndex("UserId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_incomesources_userid_name");
+
+                    b.ToTable("incomesources", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.IncomeSourceAlias", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<int>("IncomeSourceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("incomesourceid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_incomesourcealiases");
+
+                    b.HasIndex("IncomeSourceId")
+                        .HasDatabaseName("ix_incomesourcealiases_incomesourceid");
+
+                    b.HasIndex("UserId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_incomesourcealiases_userid_name");
+
+                    b.ToTable("incomesourcealiases", (string)null);
                 });
 
             modelBuilder.Entity("ExpensesTracker.api.Models.User", b =>
@@ -529,6 +687,27 @@ namespace ExpensesTracker.api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ExpensesTracker.api.Models.DiscountRule", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.IncomeSource", "IncomeSource")
+                        .WithMany("DiscountRules")
+                        .HasForeignKey("IncomeSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_discountrules_incomesources_incomesourceid");
+
+                    b.HasOne("ExpensesTracker.api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_discountrules_users_userid");
+
+                    b.Navigation("IncomeSource");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("ExpensesTracker.api.Models.Expense", b =>
                 {
                     b.HasOne("ExpensesTracker.api.Models.Category", "Category")
@@ -567,6 +746,12 @@ namespace ExpensesTracker.api.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_incomes_categories_categoryid");
 
+                    b.HasOne("ExpensesTracker.api.Models.IncomeSource", "Source")
+                        .WithMany("Incomes")
+                        .HasForeignKey("SourceId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_incomes_incomesources_sourceid");
+
                     b.HasOne("ExpensesTracker.api.Models.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
@@ -575,6 +760,41 @@ namespace ExpensesTracker.api.Migrations
                         .HasConstraintName("fk_incomes_users_userid");
 
                     b.Navigation("Category");
+
+                    b.Navigation("Source");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.IncomeSource", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_incomesources_users_userid");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.IncomeSourceAlias", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.IncomeSource", "IncomeSource")
+                        .WithMany()
+                        .HasForeignKey("IncomeSourceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_incomesourcealiases_incomesources_incomesourceid");
+
+                    b.HasOne("ExpensesTracker.api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_incomesourcealiases_users_userid");
+
+                    b.Navigation("IncomeSource");
 
                     b.Navigation("User");
                 });
@@ -606,6 +826,13 @@ namespace ExpensesTracker.api.Migrations
             modelBuilder.Entity("ExpensesTracker.api.Models.CreditCard", b =>
                 {
                     b.Navigation("Expenses");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.IncomeSource", b =>
+                {
+                    b.Navigation("DiscountRules");
+
+                    b.Navigation("Incomes");
                 });
 
             modelBuilder.Entity("ExpensesTracker.api.Models.User", b =>

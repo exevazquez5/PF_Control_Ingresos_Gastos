@@ -14,6 +14,10 @@ namespace ExpensesTracker.api.Dtos.Income
         public int CategoryId { get; set; }
         public string CategoryName { get; set; }
 
+        public int? SourceId { get; set; }
+        public string? SourceName { get; set; }
+        public string? Mode { get; set; }
+
         public int UserId { get; set; }
         public string Username { get; set; }
         public bool IsDeleted { get; set; }

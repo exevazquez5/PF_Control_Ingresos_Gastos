@@ -23,6 +23,9 @@ namespace ExpensesTracker.api.Models
         public string? Icon { get; set; }
         public string? Color { get; set; }
 
+        /// <summary>Categoría de ingreso con naturaleza laboral (sueldo, freelance, etc.).</summary>
+        public bool IsLabor { get; set; }
+
         public bool IsArchived { get; set; }
         public DateTime? ArchivedAt { get; set; }
 

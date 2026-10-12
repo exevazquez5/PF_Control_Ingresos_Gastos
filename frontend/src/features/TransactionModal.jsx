@@ -2,6 +2,7 @@ import { useState } from 'react';
 import formatCurrency from "../utils/format.js"
 import CurrencyInput from "../components/CurrencyInput.jsx";
 import CategoryCombobox from "../components/CategoryCombobox.jsx";
+import IncomeSourceCombobox from "../components/IncomeSourceCombobox.jsx";
 import RecurringToggle from "../components/RecurringToggle.jsx";
 import { MAX_TRANSACTION_AMOUNT, MAX_AMOUNT_MESSAGE } from "../utils/limits.js";
 import { isLaborCategory } from "../utils/laborCategories.js";
@@ -13,6 +14,7 @@ export default function TransactionModal({
   formData,
   setFormData,
   categories,
+  incomeSources = [],
   enCuotas,
   setEnCuotas,
   cantidadCuotas,
@@ -59,7 +61,16 @@ export default function TransactionModal({
                 value={formData.type}
                 onChange={(e) => {
                   const newType = e.target.value;
-                  setFormData({ ...formData, type: newType, categoryId: "", grossAmount: "", isRecurring: false });
+                  setFormData({
+                    ...formData,
+                    type: newType,
+                    categoryId: "",
+                    grossAmount: "",
+                    isRecurring: false,
+                    sourceId: null,
+                    sourceName: "",
+                    mode: "neto"
+                  });
                   setShowGross(false);
 
                   if (e.target.value === "ingreso") {
@@ -85,9 +96,10 @@ export default function TransactionModal({
                 value={formData.categoryId}
                 onChange={(id) => {
                   const cat = categories.find(c => c.id === id);
-                  const laboral = isLaborCategory(cat?.name);
+                  const laboral = isLaborCategory(cat);
                   const next = { ...formData, categoryId: id };
-                  if (!laboral) {
+                  // El bruto no se limpia en modo bruto (es obligatorio, D1)
+                  if (!laboral && formData.mode !== "bruto") {
                     next.grossAmount = "";
                     setShowGross(false);
                   }
@@ -95,6 +107,56 @@ export default function TransactionModal({
                 }}
               />
             </div>
+
+            {/* Fuente de ingreso + modo (D1, Fase 3): solo ingresos */}
+            {formData.type === "ingreso" && (
+              <div className="space-y-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
+                    Fuente
+                  </label>
+                  <IncomeSourceCombobox
+                    sources={incomeSources}
+                    value={formData.sourceId}
+                    sourceName={formData.sourceName}
+                    onChange={({ id, name, mode }) =>
+                      setFormData({ ...formData, sourceId: id, sourceName: name, mode: mode || formData.mode || "neto" })
+                    }
+                    onCustomName={(name) =>
+                      setFormData({ ...formData, sourceId: null, sourceName: name })
+                    }
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
+                    Cómo llega el dinero
+                  </label>
+                  <div className="flex gap-2">
+                    {[
+                      { value: 'neto', label: 'Neto', hint: 'depositado' },
+                      { value: 'bruto', label: 'Bruto', hint: 'del recibo' }
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        aria-label={`Modo ${opt.value}`}
+                        onClick={() => setFormData({ ...formData, mode: opt.value })}
+                        className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                          (formData.mode || 'neto') === opt.value
+                            ? 'bg-blue-100 border-blue-500 text-blue-700 dark:bg-blue-900 dark:text-blue-300 dark:border-blue-600'
+                            : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300'
+                        }`}
+                      >
+                        {opt.label} <span className="text-xs opacity-70">({opt.hint})</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    El monto guardado siempre es lo depositado. En modo bruto se pide además el bruto del recibo.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Monto */}
             <div>
@@ -123,10 +185,10 @@ export default function TransactionModal({
               )}
             </div>
 
-            {/* Bruto del recibo (D4): solo ingresos con categoría laboral */}
-            {formData.type === "ingreso" && isLaborCategory(categories.find(c => c.id === formData.categoryId)?.name) && (
+            {/* Bruto del recibo (D4/D1): obligatorio en modo bruto; opcional en neto con categoría laboral */}
+            {formData.type === "ingreso" && (formData.mode === "bruto" || isLaborCategory(categories.find(c => c.id === formData.categoryId))) && (
               <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3">
-                {!showGross ? (
+                {!(showGross || formData.mode === "bruto") ? (
                   <button
                     type="button"
                     onClick={() => setShowGross(true)}
@@ -139,14 +201,17 @@ export default function TransactionModal({
                     <div className="flex items-center justify-between mb-1">
                       <label className="block text-sm font-medium text-gray-700 dark:text-white">
                         Bruto del recibo
+                        {formData.mode === "bruto" && <span className="text-red-500"> *</span>}
                       </label>
-                      <button
-                        type="button"
-                        onClick={() => setShowGross(false)}
-                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-                      >
-                        Ocultar
-                      </button>
+                      {formData.mode !== "bruto" && (
+                        <button
+                          type="button"
+                          onClick={() => setShowGross(false)}
+                          className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                        >
+                          Ocultar
+                        </button>
+                      )}
                     </div>
                     <CurrencyInput
                       value={formData.grossAmount || ''}
@@ -157,6 +222,11 @@ export default function TransactionModal({
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                       Monto bruto antes de descuentos (jubilación, prepaga, etc.).
                     </p>
+                    {formData.mode === "bruto" && !formData.grossAmount && (
+                      <p className="text-xs text-red-500 mt-1">
+                        En modo bruto el bruto del recibo es obligatorio.
+                      </p>
+                    )}
                   </>
                 )}
               </div>
@@ -355,7 +425,10 @@ export default function TransactionModal({
               <button
                 type="button"
                 onClick={handleSubmit}
-                disabled={Number(formData.amount) > MAX_TRANSACTION_AMOUNT}
+                disabled={
+                  Number(formData.amount) > MAX_TRANSACTION_AMOUNT ||
+                  (formData.type === "ingreso" && formData.mode === "bruto" && !formData.grossAmount)
+                }
                 className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editingTransaction ? "Actualizar" : "Agregar"}

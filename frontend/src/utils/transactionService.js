@@ -31,12 +31,16 @@ export async function deleteTransactionOnServer({ base, id, token }) {
   );
 }
 
-/** Campos exclusivos de ingresos: bruto (D4) y recurrencia (D10) */
+/** Campos exclusivos de ingresos: bruto (D4), recurrencia (D10) y fuente/modo (D1, Fase 3) */
 export function incomeFields(formData) {
   if ((formData.type || '').toLowerCase() !== 'ingreso') return {};
   return {
     grossAmount: formData.grossAmount ? parseFloat(formData.grossAmount) : null,
-    isRecurring: !!formData.isRecurring
+    isRecurring: !!formData.isRecurring,
+    sourceId: formData.sourceId || null,
+    // Sin fuente elegida, el nombre tipeado se resuelve o crea en el backend
+    sourceName: formData.sourceId ? null : (formData.sourceName || '').trim() || null,
+    mode: formData.mode || 'neto'
   };
 }
 

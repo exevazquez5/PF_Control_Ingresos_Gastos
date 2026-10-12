@@ -21,6 +21,7 @@ public class IncomeService : IIncomeService
         return await _context.Incomes
             .Include(i => i.Category)
             .Include(i => i.User)
+            .Include(i => i.Source)
             .ToListAsync();
     }
 
@@ -29,6 +30,7 @@ public class IncomeService : IIncomeService
         return await _context.Incomes
             .Include(i => i.Category)
             .Include(i => i.User)
+            .Include(i => i.Source)
             .FirstOrDefaultAsync(i => i.Id == id);
     }
 
@@ -37,6 +39,7 @@ public class IncomeService : IIncomeService
         return await _context.Incomes
             .Include(i => i.Category)
             .Include(i => i.User)
+            .Include(i => i.Source)
             .Where(i => i.UserId == userId)
             .ToListAsync();
     }
@@ -49,6 +52,7 @@ public class IncomeService : IIncomeService
         return await _context.Incomes
             .Include(i => i.Category)
             .Include(i => i.User)
+            .Include(i => i.Source)
             .FirstOrDefaultAsync(i => i.Id == income.Id);
     }
 
@@ -63,6 +67,8 @@ public class IncomeService : IIncomeService
         existingIncome.Description = income.Description;
         existingIncome.Date = income.Date;
         existingIncome.CategoryId = income.CategoryId;
+        existingIncome.SourceId = income.SourceId;
+        existingIncome.Mode = income.Mode;
         existingIncome.UserId = income.UserId;
 
         await _context.SaveChangesAsync();
@@ -116,7 +122,87 @@ public class IncomeService : IIncomeService
         return await query
             .Include(i => i.Category)
             .Include(i => i.User)
+            .Include(i => i.Source)
             .ToListAsync();
+    }
+
+    public async Task<object> GetOverviewAsync(int userId)
+    {
+        var incomes = await _context.Incomes
+            .Include(i => i.Category)
+            .Include(i => i.Source)
+            .Where(i => i.UserId == userId)
+            .ToListAsync();
+
+        var currentMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+        if (incomes.Count == 0)
+        {
+            return new
+            {
+                FirstIncomeMonth = (DateTime?)null,
+                CurrentMonth = currentMonth,
+                Months = Array.Empty<object>()
+            };
+        }
+
+        // D7: meses vacíos solo entre el primer ingreso y el fin (mes actual o último ingreso)
+        var firstIncomeMonth = incomes.Min(i => new DateTime(i.Date.Year, i.Date.Month, 1));
+        var lastIncomeMonth = incomes.Max(i => new DateTime(i.Date.Year, i.Date.Month, 1));
+        var endMonth = lastIncomeMonth > currentMonth ? lastIncomeMonth : currentMonth;
+
+        var months = new List<object>();
+        for (var month = firstIncomeMonth; month <= endMonth; month = month.AddMonths(1))
+        {
+            var monthIncomes = incomes
+                .Where(i => i.Date.Year == month.Year && i.Date.Month == month.Month)
+                .ToList();
+
+            var sources = monthIncomes
+                .GroupBy(i => new
+                {
+                    i.SourceId,
+                    // Sin fuente asignada (filas legadas): se deriva del nombre de la categoría (D6)
+                    Name = i.Source?.Name ?? i.Category?.Name ?? "Sin fuente"
+                })
+                .Select(g => new
+                {
+                    SourceId = g.Key.SourceId,
+                    SourceName = g.Key.Name,
+                    Total = g.Sum(i => i.Amount),
+                    GrossTotal = g.Sum(i => i.GrossAmount ?? i.Amount)
+                })
+                .OrderByDescending(s => s.Total)
+                .ToList();
+
+            var categories = monthIncomes
+                .GroupBy(i => new { i.CategoryId, Name = i.Category?.Name ?? "Sin categoría" })
+                .Select(g => new
+                {
+                    CategoryId = g.Key.CategoryId,
+                    CategoryName = g.Key.Name,
+                    Total = g.Sum(i => i.Amount)
+                })
+                .OrderByDescending(c => c.Total)
+                .ToList();
+
+            months.Add(new
+            {
+                Year = month.Year,
+                Month = month.Month,
+                Total = monthIncomes.Sum(i => i.Amount),
+                GrossTotal = monthIncomes.Sum(i => i.GrossAmount ?? i.Amount),
+                Sources = sources,
+                Categories = categories
+            });
+        }
+
+        return new
+        {
+            FirstIncomeMonth = firstIncomeMonth,
+            CurrentMonth = currentMonth,
+            Months = months
+        };
     }
 
     public async Task<bool> ArchiveAsync(int id, int? userId = null)
@@ -157,6 +243,7 @@ public class IncomeService : IIncomeService
             .IgnoreQueryFilters()
             .Include(i => i.Category)
             .Include(i => i.User)
+            .Include(i => i.Source)
             .Where(i => i.UserId == userId && i.IsDeleted)
             .OrderByDescending(i => i.DeletedAt)
             .ToListAsync();

@@ -28,3 +28,9 @@ export function formatSourceLabel(key) {
   if (!key) return '';
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
+
+// Etiqueta de fuente de un ingreso: usa el nombre persistido (Fase 3) o deriva de la descripción (legado).
+export function sourceLabel(income) {
+  if (income?.sourceName) return income.sourceName;
+  return formatSourceLabel(deriveSourceKey(income?.description)) || '';
+}

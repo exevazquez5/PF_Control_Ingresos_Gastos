@@ -14,6 +14,7 @@ namespace ExpensesTracker.api.DTOs.Category
         public List<CategoryDto> Children { get; set; } = new();
         public string? Icon { get; set; }
         public string? Color { get; set; }
+        public bool IsLabor { get; set; }
         public bool IsArchived { get; set; }
         public DateTime? ArchivedAt { get; set; }
         public DateTime CreatedAt { get; set; }
