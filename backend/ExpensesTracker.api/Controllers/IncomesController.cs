@@ -336,7 +336,13 @@ namespace ExpensesTracker.api.Controllers
         [HttpPost("{id}/restore")]
         public async Task<IActionResult> Restore(int id)
         {
-            var restored = await _incomeService.RestoreAsync(id);
+            var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+                return Unauthorized();
+
+            var isAdmin = User.IsInRole("Admin");
+
+            var restored = await _incomeService.RestoreAsync(id, userId, isAdmin);
             if (!restored) return NotFound();
 
             return NoContent();

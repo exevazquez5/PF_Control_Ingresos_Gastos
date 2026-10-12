@@ -66,6 +66,7 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 ## Ramas, CI y despliegue
 
 - Todo desarrollo en `feature/*` → **PR a `main`**. `main` está protegida: el check `build` debe pasar, sin force-push ni borrado de rama.
+- El check `build` además ejecuta los tests de integración del backend (`dotnet test`, proyecto `ExpensesTracker.api.Tests`, xUnit + SQLite in-memory). Patrón: 401 sin token y 404 cross-user.
 - Merge a `main` ⇒ deploy automático: Cloudflare Pages (frontend) + Render (backend). Render aplica las migraciones al arrancar.
 - Cloudflare Pages necesita la variable de entorno de build `VITE_API_BASE_URL=https://gastar-app.onrender.com/api` (dashboard de Pages).
 - Verificación post-merge: `/health` + `GET /api/<endpoint nuevo>` (404 → 401 indica código nuevo desplegado).
@@ -90,7 +91,8 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 │       └── components/           # formularios/listados reutilizables
 ├── backend/ExpensesTracker.api/
 │   ├── Controllers/  Services/  Models/  DTOs/  Data/  Migrations/
-├── .github/workflows/ci.yml      # build backend (.NET) + frontend (Vite)
+├── backend/ExpensesTracker.api.Tests/   # tests de integración (xUnit, WebApplicationFactory, SQLite)
+├── .github/workflows/ci.yml      # build backend (.NET) + tests (xUnit) + frontend (Vite)
 ├── docker-compose.yml            # servicios: db + backend + nginx
 ├── dev.ps1                       # stack DEV local completo
 ├── backup-prod.ps1               # respaldo de PROD (pg_dump)

@@ -16,7 +16,7 @@ namespace ExpensesTracker.api.Interfaces
         Task<BudgetWithMeta?> GetForPeriodAsync(int userId, string period);
         Task<CanSpendResponse> CanSpendAsync(int userId, CanSpendRequest request);
         Task<bool> ArchiveAsync(int userId, int budgetId);
-        Task<bool> RestoreAsync(int budgetId);
+        Task<bool> RestoreAsync(int userId, int budgetId);
         Task<IEnumerable<Budget>> GetDeletedAsync(int userId);
     }
 }

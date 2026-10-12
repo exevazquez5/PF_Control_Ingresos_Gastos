@@ -204,7 +204,7 @@ namespace ExpensesTracker.api.Controllers
             var userId = GetUserId();
             if (!userId.HasValue) return Unauthorized("Token inválido.");
 
-            var restored = await _budgetService.RestoreAsync(id);
+            var restored = await _budgetService.RestoreAsync(userId.Value, id);
             if (!restored) return NotFound();
 
             return NoContent();

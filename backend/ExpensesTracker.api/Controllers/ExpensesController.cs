@@ -319,7 +319,13 @@ public class ExpensesController : ControllerBase
     [HttpPost("{id}/restore")]
     public async Task<IActionResult> Restore(int id)
     {
-        var restored = await _expenseService.RestoreAsync(id);
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+            return Unauthorized("Token inválido.");
+
+        var isAdmin = User.IsInRole("Admin");
+
+        var restored = await _expenseService.RestoreAsync(id, userId, isAdmin);
         if (!restored) return NotFound();
 
         return NoContent();
@@ -444,8 +450,17 @@ public class ExpensesController : ControllerBase
     [HttpPut("cuotas/{id}/pagar")]
     public async Task<IActionResult> MarcarCuotaPagada(int id)
     {
-        var cuota = await _context.PagosCuotas.FindAsync(id);
-        if (cuota == null)
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+            return Unauthorized("Token inválido.");
+
+        var cuota = await _context.PagosCuotas
+            .Include(pc => pc.Expense)
+            .FirstOrDefaultAsync(pc => pc.Id == id);
+        if (cuota == null || cuota.Expense == null)
+            return NotFound();
+
+        if (cuota.Expense.UserId != userId)
             return NotFound();
 
         cuota.Status = PagoCuotaStatus.Paid;
@@ -455,9 +470,17 @@ public class ExpensesController : ControllerBase
         return Ok();
     }
 
+    [Authorize]
     [HttpGet("cuotas/{userId}/{anio}/{mes}")]
     public async Task<IActionResult> GetCuotasDelMes(int userId, int anio, int mes)
     {
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var callerId))
+            return Unauthorized("Token inválido.");
+
+        if (callerId != userId)
+            return NotFound();
+
         var cuotas = await _context.PagosCuotas
             .Include(pc => pc.Expense)
                 .ThenInclude(e => e.Category)
@@ -509,9 +532,17 @@ public class ExpensesController : ControllerBase
         return Ok(resultado);
     }
 
+    [Authorize]
     [HttpGet("cuotas/pagadas/{userId}/{anio}/{mes}")]
     public async Task<IActionResult> GetCuotasPagadasDelMes(int userId, int anio, int mes)
     {
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var callerId))
+            return Unauthorized("Token inválido.");
+
+        if (callerId != userId)
+            return NotFound();
+
         var cuotasPagadas = await _context.PagosCuotas
             .Include(pc => pc.Expense)
                 .ThenInclude(e => e.Category)
@@ -570,6 +601,13 @@ public class ExpensesController : ControllerBase
     [HttpPut("cuotas/pagar-todas/{userId}/{anio}/{mes}")]
     public async Task<IActionResult> PagarTodasCuotas(int userId, int anio, int mes)
     {
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var callerId))
+            return Unauthorized("Token inválido.");
+
+        if (callerId != userId)
+            return NotFound();
+
         using var transaction = await _context.Database.BeginTransactionAsync();
         try
         {

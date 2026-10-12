@@ -132,10 +132,12 @@ public class IncomeService : IIncomeService
         return true;
     }
 
-    public async Task<bool> RestoreAsync(int id)
+    public async Task<bool> RestoreAsync(int id, int userId, bool isAdmin = false)
     {
         var income = await _context.Incomes.IgnoreQueryFilters().FirstOrDefaultAsync(i => i.Id == id);
         if (income == null) return false;
+
+        if (!isAdmin && income.UserId != userId) return false;
 
         if (!income.IsDeleted) return false;
 
