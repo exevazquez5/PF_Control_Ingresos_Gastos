@@ -103,6 +103,12 @@ namespace ExpensesTracker.api.Services
                     r.IncomeSourceId == rule.IncomeSourceId && r.Name == newName && r.Id != rule.Id))
                 return (false, "Ya existe una regla con ese nombre en esta fuente.", 400);
 
+            // NOTA (deuda explícita Fase 3.5a): editar monto/porcentaje hoy SOBRESCRIBE la regla,
+            // por lo que se recalcula también el histórico de meses anteriores. El versionado
+            // automático (cerrar la regla con ValidTo = fin del mes anterior y crear una nueva
+            // desde el mes indicado) queda pendiente: el índice único (IncomeSourceId, Name) y
+            // que las asignaciones apuntan por RuleId obligan a definir un nombre para la nueva
+            // versión y a migrar/reactivar asignaciones. Ver PR #8.
             existing.IncomeSourceId = rule.IncomeSourceId;
             existing.Name = newName;
             existing.Percentage = rule.Percentage;
@@ -247,6 +253,9 @@ namespace ExpensesTracker.api.Services
                 .Where(a => a.Year == year && a.Month == month)
                 .ToList();
 
+            // Montos de las asignaciones manuales del mes, en una sola consulta por tabla (evita N+1).
+            var assignmentAmountById = await ExpenseRuleAssignmentAmountsAsync(userId, monthAssignments);
+
             var nonCuotaExpenses = await _context.Expenses
                 .IgnoreQueryFilters()
                 .Where(e => e.UserId == userId && !e.IsDeleted
@@ -378,9 +387,12 @@ namespace ExpensesTracker.api.Services
                 else if (rule.IsLinked)
                 {
                     var manual = monthAssignments.Where(a => a.RuleId == rule.Id).ToList();
-                    var manualAmount = await ExpenseRuleAssignmentAmountAsync(manual);
-                    var auto = autoMatches.ContainsKey(rule.Id) ? autoMatches[rule.Id] : 0m;
-                    gastosVinculados = manual.Count + (autoCounts.ContainsKey(rule.Id) ? autoCounts[rule.Id] : 0);
+                    // La asignación manual decide el mes; solo aporta monto si el Dashboard lo contaría
+                    // (gasto directo vivo o cuota pagada). gastosVinculados cuenta las asignaciones.
+                    var manualAmount = manual.Sum(a => assignmentAmountById.GetValueOrDefault(a.Id));
+                    var auto = autoMatches.GetValueOrDefault(rule.Id);
+                    var autoCount = autoCounts.GetValueOrDefault(rule.Id);
+                    gastosVinculados = manual.Count + autoCount;
                     if (gastosVinculados > 0)
                         monto = manualAmount + auto;
                 }
@@ -446,23 +458,58 @@ namespace ExpensesTracker.api.Services
             };
         }
 
-        private async Task<decimal> ExpenseRuleAssignmentAmountAsync(List<ExpenseRuleAssignment> assignments)
+        /// <summary>
+        /// Montos de las asignaciones manuales, en una sola consulta por tabla (evita N+1).
+        /// Regla: la asignación manual decide el MES, pero solo cuenta lo que el Dashboard cuenta
+        /// como gasto: un gasto directo NO borrado del usuario, y una cuota PAGADA (Status == Paid)
+        /// cuyo gasto (del usuario) no está borrado. Una cuota impaga o un gasto borrado no aportan.
+        /// Devuelve asignaciónId → monto (solo las que aportan monto).
+        /// </summary>
+        private async Task<Dictionary<int, decimal>> ExpenseRuleAssignmentAmountsAsync(
+            int userId, List<ExpenseRuleAssignment> assignments)
         {
-            var total = 0m;
+            var result = new Dictionary<int, decimal>();
+            if (assignments.Count == 0) return result;
+
+            var expenseIds = assignments
+                .Where(a => a.PagoCuotaId == null)
+                .Select(a => a.ExpenseId)
+                .Distinct()
+                .ToList();
+            var cuotaIds = assignments
+                .Where(a => a.PagoCuotaId != null)
+                .Select(a => a.PagoCuotaId!.Value)
+                .Distinct()
+                .ToList();
+
+            var expenseAmounts = expenseIds.Count == 0
+                ? new Dictionary<int, decimal>()
+                : await _context.Expenses.IgnoreQueryFilters()
+                    .Where(e => expenseIds.Contains(e.Id) && e.UserId == userId && !e.IsDeleted)
+                    .ToDictionaryAsync(e => e.Id, e => e.Amount);
+
+            var cuotaAmounts = cuotaIds.Count == 0
+                ? new Dictionary<int, decimal>()
+                : await _context.PagosCuotas
+                    .Where(pc => cuotaIds.Contains(pc.Id)
+                        && pc.Status == PagoCuotaStatus.Paid
+                        && pc.Expense != null && pc.Expense.UserId == userId && !pc.Expense.IsDeleted)
+                    .ToDictionaryAsync(pc => pc.Id, pc => pc.MontoCuota);
+
             foreach (var a in assignments)
             {
                 if (a.PagoCuotaId.HasValue)
                 {
-                    var cuota = await _context.PagosCuotas.FirstOrDefaultAsync(pc => pc.Id == a.PagoCuotaId.Value);
-                    if (cuota != null) total += cuota.MontoCuota;
+                    if (cuotaAmounts.TryGetValue(a.PagoCuotaId.Value, out var cuotaMonto))
+                        result[a.Id] = cuotaMonto;
                 }
-                else
+                else if (expenseAmounts.TryGetValue(a.ExpenseId, out var expenseMonto))
                 {
-                    var expense = await _context.Expenses.IgnoreQueryFilters().FirstOrDefaultAsync(e => e.Id == a.ExpenseId);
-                    if (expense != null && !expense.IsDeleted) total += expense.Amount;
+                    result[a.Id] = expenseMonto;
                 }
             }
-            return total;
+
+            return result;
         }
 
         private static bool IsTaken(CandidateKey key, HashSet<int> excludedExpenseIds, HashSet<int> excludedCuotaIds)

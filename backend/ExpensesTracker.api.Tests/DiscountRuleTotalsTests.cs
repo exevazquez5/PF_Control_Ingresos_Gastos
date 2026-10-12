@@ -835,4 +835,207 @@ public class DiscountRuleTotalsTests : IDisposable
         Assert.Null(RuleByName(octFuente, "Hasta septiembre"));
         Assert.Equal(100000m, octFuente.GetProperty("descuentos").GetDecimal());
     }
+
+    [Fact]
+    public async Task H_CuotaImpagaAsignada_NoResta()
+    {
+        var client = UserAClient();
+        var sourceId = await CreateSourceAsync(client, "Empresa IMPAGA", "bruto");
+        var oct = new DateTime(2026, 10, 10);
+
+        await CreateIncomeAsync(client, sourceId, 500000m, "bruto", oct);
+
+        int expenseId;
+        int cuotaId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var gasto = new Expense { Amount = 200000m, Description = "Obra impaga", Date = oct, CategoryId = TestingApiFactory.CategoryGasto, UserId = TestingApiFactory.UserA };
+            db.Expenses.Add(gasto);
+            await db.SaveChangesAsync();
+            var cuota = new PagoCuota { ExpenseId = gasto.Id, NroCuota = 1, MontoCuota = 200000m, DueDate = new DateTime(2026, 10, 15), Status = PagoCuotaStatus.Pending };
+            db.PagosCuotas.Add(cuota);
+            await db.SaveChangesAsync();
+            expenseId = gasto.Id;
+            cuotaId = cuota.Id;
+        }
+
+        var ruleId = await CreateLinkedRuleAsync(client, sourceId, "Obra social", linkedDescription: "Obra impaga");
+
+        // La asignación manual se puede hacer sobre una cuota impaga...
+        var assign = await client.PostAsJsonAsync($"/api/DiscountRules/{ruleId}/assign", new { expenseId, pagoCuotaId = cuotaId, year = 2026, month = 10 });
+        Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
+
+        // ...pero no resta: el Dashboard no cuenta la cuota impaga como gasto.
+        var totals = await GetTotalsAsync(client, 2026, 10);
+        var fuente = SourceByName(totals, "Empresa IMPAGA")!.Value;
+        Assert.Equal(0m, Monto(RuleByName(fuente, "Obra social")!.Value));
+        Assert.Equal(1, RuleByName(fuente, "Obra social")!.Value.GetProperty("gastosVinculados").GetInt32());
+        Assert.Equal(0m, fuente.GetProperty("descuentos").GetDecimal());
+        Assert.Equal(500000m, fuente.GetProperty("neto").GetDecimal());
+    }
+
+    [Fact]
+    public async Task I_CuotaAsignadaYGastoBorrado_NoResta()
+    {
+        var client = UserAClient();
+        var sourceId = await CreateSourceAsync(client, "Empresa CUOTABORRA", "bruto");
+        var oct = new DateTime(2026, 10, 10);
+
+        await CreateIncomeAsync(client, sourceId, 500000m, "bruto", oct);
+
+        int expenseId;
+        int cuotaId;
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var gasto = new Expense { Amount = 300000m, Description = "Obra borrable cuota", Date = oct, CategoryId = TestingApiFactory.CategoryGasto, UserId = TestingApiFactory.UserA };
+            db.Expenses.Add(gasto);
+            await db.SaveChangesAsync();
+            var cuota = new PagoCuota { ExpenseId = gasto.Id, NroCuota = 1, MontoCuota = 120000m, DueDate = new DateTime(2026, 10, 15), PaidAt = new DateTime(2026, 10, 5), Status = PagoCuotaStatus.Paid };
+            db.PagosCuotas.Add(cuota);
+            await db.SaveChangesAsync();
+            expenseId = gasto.Id;
+            cuotaId = cuota.Id;
+        }
+
+        var ruleId = await CreateLinkedRuleAsync(client, sourceId, "Obra social", linkedDescription: "Obra borrable cuota");
+        var assign = await client.PostAsJsonAsync($"/api/DiscountRules/{ruleId}/assign", new { expenseId, pagoCuotaId = cuotaId, year = 2026, month = 10 });
+        Assert.Equal(HttpStatusCode.OK, assign.StatusCode);
+
+        var before = await GetTotalsAsync(client, 2026, 10);
+        var antes = SourceByName(before, "Empresa CUOTABORRA")!.Value;
+        Assert.Equal(120000m, Monto(RuleByName(antes, "Obra social")!.Value));
+        Assert.Equal(120000m, antes.GetProperty("descuentos").GetDecimal());
+
+        // Gasto borrado: la cuota (aún pagada) deja de aportar monto.
+        var del = await client.DeleteAsync($"/api/Expenses/{expenseId}");
+        Assert.Equal(HttpStatusCode.NoContent, del.StatusCode);
+        var duringDelete = await GetTotalsAsync(client, 2026, 10);
+        var borrado = SourceByName(duringDelete, "Empresa CUOTABORRA")!.Value;
+        Assert.Equal(0m, Monto(RuleByName(borrado, "Obra social")!.Value));
+        Assert.Equal(0m, borrado.GetProperty("descuentos").GetDecimal());
+
+        // Gasto restaurado: vuelve a aportar.
+        var restore = await client.PostAsync($"/api/Expenses/{expenseId}/restore", null);
+        Assert.Equal(HttpStatusCode.NoContent, restore.StatusCode);
+        var afterRestore = await GetTotalsAsync(client, 2026, 10);
+        var restaurado = SourceByName(afterRestore, "Empresa CUOTABORRA")!.Value;
+        Assert.Equal(120000m, Monto(RuleByName(restaurado, "Obra social")!.Value));
+    }
+
+    [Fact]
+    public async Task J_ReglaNoVigente_NoConsumeGastosDeUnaVigente()
+    {
+        var client = UserAClient();
+        var sourceId = await CreateSourceAsync(client, "Empresa NOVIG", "bruto");
+        var oct = new DateTime(2026, 10, 10);
+
+        await CreateIncomeAsync(client, sourceId, 500000m, "bruto", oct);
+        await CreateExpenseAsync(client, 90000m, "VEP vigencia", oct);
+
+        // La regla NO vigente se crea primero: si participara del auto-match, se quedaría el gasto.
+        await CreateLinkedRuleAsync(client, sourceId, "Futura", linkedDescription: "VEP vigencia", validFrom: new DateTime(2026, 11, 1));
+        await CreateLinkedRuleAsync(client, sourceId, "Vigente", linkedDescription: "VEP vigencia", validFrom: new DateTime(2026, 1, 1));
+
+        var totals = await GetTotalsAsync(client, 2026, 10);
+        var fuente = SourceByName(totals, "Empresa NOVIG")!.Value;
+
+        // La no vigente ni aparece en el mes; la vigente consume el gasto.
+        Assert.Null(RuleByName(fuente, "Futura"));
+        Assert.Equal(90000m, Monto(RuleByName(fuente, "Vigente")!.Value));
+        Assert.Equal(1, RuleByName(fuente, "Vigente")!.Value.GetProperty("gastosVinculados").GetInt32());
+        Assert.Equal(90000m, fuente.GetProperty("descuentos").GetDecimal());
+    }
+
+    [Fact]
+    public async Task K_ValidToAnteriorAValidFrom_Returns400()
+    {
+        var client = UserAClient();
+        var sourceId = await CreateSourceAsync(client, "Empresa VTO", "bruto");
+
+        var post = await client.PostAsJsonAsync("/api/DiscountRules", new
+        {
+            incomeSourceId = sourceId,
+            name = "Rango inválido",
+            fixedAmount = 100m,
+            validFrom = new DateTime(2026, 10, 1),
+            validTo = new DateTime(2026, 9, 30),
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, post.StatusCode);
+        Assert.Contains("no puede ser anterior a la de inicio", await post.Content.ReadAsStringAsync());
+
+        var ruleResponse = await client.PostAsJsonAsync("/api/DiscountRules", new
+        {
+            incomeSourceId = sourceId,
+            name = "Rango ok",
+            fixedAmount = 100m,
+            validFrom = new DateTime(2026, 1, 1),
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.Created, ruleResponse.StatusCode);
+        using var doc = JsonDocument.Parse(await ruleResponse.Content.ReadAsStringAsync());
+        var ruleId = doc.RootElement.GetProperty("id").GetInt32();
+
+        var put = await client.PutAsJsonAsync($"/api/DiscountRules/{ruleId}", new
+        {
+            id = ruleId,
+            incomeSourceId = sourceId,
+            name = "Rango ok",
+            fixedAmount = 100m,
+            validFrom = new DateTime(2026, 10, 1),
+            validTo = new DateTime(2026, 9, 30),
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, put.StatusCode);
+        Assert.Contains("no puede ser anterior a la de inicio", await put.Content.ReadAsStringAsync());
+    }
+
+    [Fact]
+    public async Task L_EdicionDeMonto_HoySobrescribeElHistorico_DeudaVersionado()
+    {
+        // Caracteriza la DEUDA declarada en el PR: editar el monto SOBRESCRIBE la regla y
+        // recalcula meses anteriores. Cuando se implemente el versionado, este test debe pasar
+        // a exigir que septiembre conserve el monto viejo (100) y solo octubre tome el nuevo (200).
+        var client = UserAClient();
+        var sourceId = await CreateSourceAsync(client, "Empresa EDICION", "bruto");
+        var sep = new DateTime(2026, 9, 10);
+        var oct = new DateTime(2026, 10, 10);
+
+        await CreateIncomeAsync(client, sourceId, 1000000m, "bruto", sep);
+        await CreateIncomeAsync(client, sourceId, 1000000m, "bruto", oct);
+
+        var ruleResponse = await client.PostAsJsonAsync("/api/DiscountRules", new
+        {
+            incomeSourceId = sourceId,
+            name = "Obra social",
+            fixedAmount = 100m,
+            validFrom = new DateTime(2026, 1, 1),
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.Created, ruleResponse.StatusCode);
+        using var doc = JsonDocument.Parse(await ruleResponse.Content.ReadAsStringAsync());
+        var ruleId = doc.RootElement.GetProperty("id").GetInt32();
+
+        var sepBefore = await GetTotalsAsync(client, 2026, 9);
+        Assert.Equal(100m, SourceByName(sepBefore, "Empresa EDICION")!.Value.GetProperty("descuentos").GetDecimal());
+
+        var put = await client.PutAsJsonAsync($"/api/DiscountRules/{ruleId}", new
+        {
+            id = ruleId,
+            incomeSourceId = sourceId,
+            name = "Obra social",
+            fixedAmount = 200m,
+            validFrom = new DateTime(2026, 1, 1),
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.NoContent, put.StatusCode);
+
+        // Deuda: el mes histórico cambia a 200 (hoy la edición sobrescribe).
+        var sepAfter = await GetTotalsAsync(client, 2026, 9);
+        Assert.Equal(200m, SourceByName(sepAfter, "Empresa EDICION")!.Value.GetProperty("descuentos").GetDecimal());
+        var octAfter = await GetTotalsAsync(client, 2026, 10);
+        Assert.Equal(200m, SourceByName(octAfter, "Empresa EDICION")!.Value.GetProperty("descuentos").GetDecimal());
+    }
 }
