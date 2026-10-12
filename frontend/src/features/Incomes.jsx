@@ -527,15 +527,18 @@ export default function IncomesDashboard() {
                       -{formatCurrency(fuente.descuentos)}
                     </span>
                   </div>
-                  {fuente.mode === "neto" ? (
+                  {!fuente.tieneIngresos ? (
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      Los descuentos del recibo requieren el bruto (modo Bruto).
+                      Sin ingreso este mes: las reglas se muestran a modo informativo y no entran en el neto.
                     </p>
                   ) : (
                     <div className="mt-2 space-y-1">
                       {(fuente.reglas || []).map(regla => (
                         <div key={regla.id} className="flex items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-300">
-                          <span className="truncate">{regla.name}</span>
+                          <span className="truncate">
+                            {regla.name}
+                            {!regla.deduce && <span className="text-gray-400 dark:text-gray-500"> (informativa)</span>}
+                          </span>
                           <span className="whitespace-nowrap">
                             {regla.requiereBruto
                               ? 'requiere el bruto del recibo'
@@ -550,6 +553,11 @@ export default function IncomesDashboard() {
                           </span>
                           <span className="whitespace-nowrap">{formatCurrency(fuente.otrosSinDetallar)}</span>
                         </div>
+                      )}
+                      {fuente.ingresosBruto === 0 && (
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Sin ingresos en modo Bruto este mes: los descuentos no se aplican.
+                        </p>
                       )}
                     </div>
                   )}

@@ -17,6 +17,10 @@ namespace ExpensesTracker.api.Dtos.DiscountRule
         public string? LinkedDescription { get; set; }
         public bool IsExpected { get; set; }
         public bool IsArchived { get; set; }
+        /// <summary>Vigencia desde (inclusive).</summary>
+        public DateTime ValidFrom { get; set; }
+        /// <summary>Vigencia hasta (inclusive). Null = sin fin.</summary>
+        public DateTime? ValidTo { get; set; }
         public DateTime CreatedAt { get; set; }
     }
 
@@ -31,6 +35,10 @@ namespace ExpensesTracker.api.Dtos.DiscountRule
         public int? LinkedCategoryId { get; set; }
         public string? LinkedDescription { get; set; }
         public bool IsExpected { get; set; }
+        /// <summary>Vigencia desde. Si se omite, se usa el primer día del mes de creación.</summary>
+        public DateTime? ValidFrom { get; set; }
+        /// <summary>Vigencia hasta (inclusive). Null = sin fin.</summary>
+        public DateTime? ValidTo { get; set; }
         [Required]
         public int UserId { get; set; }
     }
@@ -48,6 +56,10 @@ namespace ExpensesTracker.api.Dtos.DiscountRule
         public int? LinkedCategoryId { get; set; }
         public string? LinkedDescription { get; set; }
         public bool IsExpected { get; set; }
+        /// <summary>Vigencia desde. Si se omite, conserva la vigencia existente.</summary>
+        public DateTime? ValidFrom { get; set; }
+        /// <summary>Vigencia hasta (inclusive). Null = sin fin.</summary>
+        public DateTime? ValidTo { get; set; }
         [Required]
         public int UserId { get; set; }
     }

@@ -284,6 +284,14 @@ namespace ExpensesTracker.api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("userid");
 
+                    b.Property<DateTime>("ValidFrom")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("validfrom");
+
+                    b.Property<DateTime?>("ValidTo")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("validto");
+
                     b.HasKey("Id")
                         .HasName("pk_discountrules");
 

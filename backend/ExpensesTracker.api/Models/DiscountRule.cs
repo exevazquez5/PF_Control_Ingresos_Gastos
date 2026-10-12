@@ -31,6 +31,12 @@ namespace ExpensesTracker.api.Models
         /// <summary>Subcadena que debe contener la descripción del gasto (3-100, insensible a mayúsculas/acentos).</summary>
         public string? LinkedDescription { get; set; }
 
+        /// <summary>Desde cuándo aplica la regla (inclusive). Obligatorio; por defecto, el primer día del mes de creación.</summary>
+        public DateTime ValidFrom { get; set; }
+
+        /// <summary>Hasta cuándo aplica la regla (inclusive). Null = sin fin.</summary>
+        public DateTime? ValidTo { get; set; }
+
         public bool IsArchived { get; set; }
 
         /// <summary>Tiene vínculo a gastos (categoría y/o descripción) → elegible para auto-match y asignación manual.</summary>

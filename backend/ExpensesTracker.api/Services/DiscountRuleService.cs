@@ -51,6 +51,11 @@ namespace ExpensesTracker.api.Services
             if (source == null)
                 return (null, "La fuente de ingreso no existe.", 404);
 
+            // Vigencia: si no se indica, arranca el primer día del mes de creación.
+            rule.ValidFrom = rule.ValidFrom == default
+                ? new DateTime(DateTime.UtcNow.Year, DateTime.UtcNow.Month, 1)
+                : rule.ValidFrom.Date;
+
             var (error, statusCode) = Validate(rule, source);
             if (error != null) return (null, error, statusCode);
 
@@ -87,6 +92,9 @@ namespace ExpensesTracker.api.Services
             }
             if (source == null) return (false, "La fuente de ingreso no existe.", 404);
 
+            // Vigencia: si el cliente no la envía (default), se conserva la existente.
+            rule.ValidFrom = rule.ValidFrom == default ? existing.ValidFrom : rule.ValidFrom.Date;
+
             var (error, statusCode) = Validate(rule, source);
             if (error != null) return (false, error, statusCode);
 
@@ -102,6 +110,8 @@ namespace ExpensesTracker.api.Services
             existing.LinkedCategoryId = rule.LinkedCategoryId;
             existing.LinkedDescription = string.IsNullOrWhiteSpace(rule.LinkedDescription) ? null : rule.LinkedDescription.Trim();
             existing.IsExpected = rule.IsExpected;
+            existing.ValidFrom = rule.ValidFrom;
+            existing.ValidTo = rule.ValidTo;
 
             await _context.SaveChangesAsync();
             return (true, null, 200);
@@ -220,8 +230,11 @@ namespace ExpensesTracker.api.Services
                 .Where(i => i.UserId == userId && !i.IsDeleted && i.Date >= start && i.Date < end)
                 .ToListAsync();
 
+            // Solo las reglas vigentes en el mes (ValidFrom/ValidTo).
             var rules = await _context.DiscountRules
-                .Where(r => r.UserId == userId)
+                .Where(r => r.UserId == userId
+                    && r.ValidFrom < end
+                    && (r.ValidTo == null || r.ValidTo >= start))
                 .Include(r => r.IncomeSource)
                 .OrderBy(r => r.CreatedAt).ThenBy(r => r.Id)
                 .ToListAsync();
@@ -241,11 +254,60 @@ namespace ExpensesTracker.api.Services
                     && !_context.PagosCuotas.Any(pc => pc.ExpenseId == e.Id))
                 .ToListAsync();
 
+            // Cuotas del mes: SOLO las pagadas, por fecha de pago (PaidAt), igual que el
+            // Dashboard (/Expenses/cuotas/pagadas). El vencimiento (DueDate) no decide.
             var pagosDelMes = await _context.PagosCuotas
                 .Include(pc => pc.Expense)
                 .Where(pc => pc.Expense != null && !pc.Expense.IsDeleted && pc.Expense.UserId == userId
-                    && pc.DueDate >= start && pc.DueDate < end)
+                    && pc.Status == PagoCuotaStatus.Paid
+                    && pc.PaidAt.HasValue && pc.PaidAt.Value >= start && pc.PaidAt.Value < end)
                 .ToListAsync();
+
+            // ── Agregado de ingresos por fuente (clasificando por el snapshot de modo) ──
+            var sourcesById = new Dictionary<int, SourceDiscountsDto>();
+            var netoConBrutoBySource = new Dictionary<int, decimal>();
+            const int syntheticSourceId = -1;
+
+            foreach (var income in incomes)
+            {
+                var sourceId = income.SourceId ?? syntheticSourceId;
+                if (!sourcesById.TryGetValue(sourceId, out var s))
+                    sourcesById[sourceId] = s = new SourceDiscountsDto
+                    {
+                        SourceId = sourceId,
+                        SourceName = income.Source?.Name ?? "Sin fuente",
+                        // El modo de la fuente solo se muestra; la deducción se decide por mes.
+                        Mode = income.Source?.Mode
+                            ?? (string.Equals(income.Mode?.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase) ? IncomeSource.ModeBruto : IncomeSource.ModeNeto),
+                        Reglas = new List<DiscountLineDto>()
+                    };
+
+                // Cada ingreso se clasifica por su propio snapshot de modo (D1).
+                var incomeMode = string.IsNullOrWhiteSpace(income.Mode)
+                    ? (income.Source?.Mode ?? IncomeSource.ModeNeto)
+                    : (string.Equals(income.Mode.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase) ? IncomeSource.ModeBruto : IncomeSource.ModeNeto);
+
+                if (incomeMode == IncomeSource.ModeBruto) s.IngresosBruto += income.Amount;
+                else
+                {
+                    s.IngresosNeto += income.Amount;
+                    if (income.GrossAmount.HasValue)
+                    {
+                        s.GrossTotal = (s.GrossTotal ?? 0m) + income.GrossAmount.Value;
+                        // OtrosSinDetallar resta solo los netos que TAMBIÉN traen bruto del recibo.
+                        netoConBrutoBySource[sourceId] = netoConBrutoBySource.GetValueOrDefault(sourceId) + income.Amount;
+                    }
+                }
+            }
+
+            foreach (var s in sourcesById.Values)
+                s.TieneIngresos = s.IngresosBruto > 0 || s.IngresosNeto > 0;
+
+            // Una fuente "deduce" este mes solo si tuvo ingresos brutos ese mes. No importa el
+            // modo actual de la fuente (los ingresos con snapshot Neto nunca se restan), así un
+            // cambio de modo no altera meses históricos.
+            bool SourceDeduce(int sourceId) =>
+                sourcesById.TryGetValue(sourceId, out var s) && s.IngresosBruto > 0;
 
             var candidates = new List<CandidateExpense>();
             foreach (var e in nonCuotaExpenses)
@@ -260,7 +322,9 @@ namespace ExpensesTracker.api.Services
             var autoCounts = new Dictionary<int, int>();
             var consumed = new HashSet<CandidateKey>();
 
-            foreach (var rule in rules.Where(r => r.IsLinked && r.IncomeSource?.Mode != IncomeSource.ModeNeto))
+            // Auto-match: solo reglas vinculadas de fuentes que deducen este mes. Una fuente
+            // sin ingreso (o sin bruto) ese mes no consume gastos para otras reglas.
+            foreach (var rule in rules.Where(r => r.IsLinked && SourceDeduce(r.IncomeSourceId)))
             {
                 var amount = 0m;
                 var count = 0;
@@ -280,36 +344,6 @@ namespace ExpensesTracker.api.Services
                 }
             }
 
-            var sourcesById = new Dictionary<int, SourceDiscountsDto>();
-            const int syntheticSourceId = -1;
-
-            foreach (var income in incomes)
-            {
-                var sourceId = income.SourceId ?? syntheticSourceId;
-                if (!sourcesById.TryGetValue(sourceId, out var s))
-                    sourcesById[sourceId] = s = new SourceDiscountsDto
-                    {
-                        SourceId = sourceId,
-                        SourceName = income.Source?.Name ?? "Sin fuente",
-                        // El modo de la fuente define la deducción de sus reglas.
-                        Mode = income.Source?.Mode
-                            ?? (string.Equals(income.Mode?.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase) ? IncomeSource.ModeBruto : IncomeSource.ModeNeto),
-                        Reglas = new List<DiscountLineDto>()
-                    };
-
-                // Cada ingreso se clasifica por su propio snapshot de modo (D1).
-                var incomeMode = string.IsNullOrWhiteSpace(income.Mode)
-                    ? (income.Source?.Mode ?? IncomeSource.ModeNeto)
-                    : (string.Equals(income.Mode.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase) ? IncomeSource.ModeBruto : IncomeSource.ModeNeto);
-
-                if (incomeMode == IncomeSource.ModeBruto) s.IngresosBruto += income.Amount;
-                else
-                {
-                    s.IngresosNeto += income.Amount;
-                    if (income.GrossAmount.HasValue) s.GrossTotal = (s.GrossTotal ?? 0m) + income.GrossAmount.Value;
-                }
-            }
-
             foreach (var rule in rules)
             {
                 if (!sourcesById.TryGetValue(rule.IncomeSourceId, out var s))
@@ -321,25 +355,25 @@ namespace ExpensesTracker.api.Services
                         Reglas = new List<DiscountLineDto>()
                     };
 
-                var isNeto = s.Mode != IncomeSource.ModeBruto;
+                // Deduce solo si la fuente tiene ingresos brutos ese mes (no por el modo actual).
+                var deduce = s.IngresosBruto > 0;
                 decimal? monto = null;
-                var deduce = false;
                 var requiereBruto = false;
                 var gastosVinculados = 0;
 
                 if (rule.FixedAmount.HasValue)
                 {
                     monto = rule.FixedAmount;
-                    deduce = !isNeto;
                 }
                 else if (rule.Percentage.HasValue)
                 {
-                    var baseImporte = isNeto ? s.GrossTotal : s.IngresosBruto;
-                    if (baseImporte is > 0)
-                        monto = Math.Round(baseImporte.Value * rule.Percentage.Value / 100m, 2);
+                    // El % aplica sobre el bruto del mes; si no hay, sobre el bruto del recibo
+                    // (informativo, no deduce).
+                    var baseImporte = s.IngresosBruto > 0 ? s.IngresosBruto : (s.GrossTotal ?? 0m);
+                    if (baseImporte > 0)
+                        monto = Math.Round(baseImporte * rule.Percentage.Value / 100m, 2);
                     else
                         requiereBruto = true;
-                    deduce = !isNeto;
                 }
                 else if (rule.IsLinked)
                 {
@@ -349,7 +383,6 @@ namespace ExpensesTracker.api.Services
                     gastosVinculados = manual.Count + (autoCounts.ContainsKey(rule.Id) ? autoCounts[rule.Id] : 0);
                     if (gastosVinculados > 0)
                         monto = manualAmount + auto;
-                    deduce = !isNeto;
                 }
 
                 s.Reglas.Add(new DiscountLineDto
@@ -371,10 +404,12 @@ namespace ExpensesTracker.api.Services
 
             foreach (var s in sourcesById.Values)
             {
-                if (s.Mode == IncomeSource.ModeNeto && s.GrossTotal.HasValue)
+                if (s.GrossTotal.HasValue)
                 {
+                    // Resta solo los netos con bruto del recibo, no todos los netos (D8).
+                    var netoConBruto = netoConBrutoBySource.GetValueOrDefault(s.SourceId);
                     var explicado = s.Reglas.Where(r => r.Monto.HasValue).Sum(r => r.Monto!.Value);
-                    var otros = (s.GrossTotal.Value - s.IngresosNeto) - explicado;
+                    var otros = (s.GrossTotal.Value - netoConBruto) - explicado;
                     s.OtrosSinDetallar = Math.Round(otros, 2);
                     s.AvisoOtros = otros < 0;
                 }
@@ -393,14 +428,17 @@ namespace ExpensesTracker.api.Services
                 }
             }
 
+            var total = incomes.Sum(i => i.Amount);
+            var descuentos = sourcesById.Values.Sum(s => s.Descuentos);
+
             return new MonthDiscountsDto
             {
                 Year = year,
                 Month = month,
-                Total = incomes.Sum(i => i.Amount),
-                Descuentos = sourcesById.Values.Where(s => s.Mode == IncomeSource.ModeBruto).Sum(s => s.Descuentos),
-                // Mes sin ingreso: se omite el neto (null). Con ingreso: suma de netos reales.
-                Neto = incomes.Count == 0 ? (decimal?)null : sourcesById.Values.Sum(s => s.Neto ?? 0m),
+                Total = total,
+                Descuentos = descuentos,
+                // Invariante: Neto del mes == Total - Descuentos (meses con ingreso).
+                Neto = incomes.Count == 0 ? (decimal?)null : total - descuentos,
                 Fuentes = sourcesById.Values
                     .Where(s => s.TieneIngresos || s.Reglas.Count > 0)
                     .OrderBy(s => s.SourceId == syntheticSourceId).ThenBy(s => s.SourceName)
@@ -506,6 +544,9 @@ namespace ExpensesTracker.api.Services
                 if (decimal.Round(fixedAmount, 2) != fixedAmount)
                     return ("El monto fijo no puede tener más de 2 decimales.", 400);
             }
+
+            if (rule.ValidTo.HasValue && rule.ValidTo.Value.Date < rule.ValidFrom.Date)
+                return ("La fecha de fin de vigencia no puede ser anterior a la de inicio.", 400);
 
             var esBruto = string.Equals(source.Mode?.Trim(), IncomeSource.ModeBruto, StringComparison.OrdinalIgnoreCase);
 

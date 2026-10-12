@@ -24,6 +24,21 @@ namespace ExpensesTracker.api.Migrations
                 type: "text",
                 nullable: true);
 
+            // Vigencia de la regla (Fase 3.5a). Prod tiene 0 reglas: el default solo
+            // aplica a entornos con datos, y se corrige al mes de creación más abajo.
+            migrationBuilder.AddColumn<DateTime>(
+                name: "validfrom",
+                table: "discountrules",
+                type: "timestamp without time zone",
+                nullable: false,
+                defaultValue: new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Unspecified));
+
+            migrationBuilder.AddColumn<DateTime>(
+                name: "validto",
+                table: "discountrules",
+                type: "timestamp without time zone",
+                nullable: true);
+
             migrationBuilder.CreateTable(
                 name: "expenseruleassignments",
                 columns: table => new
@@ -131,6 +146,10 @@ namespace ExpensesTracker.api.Migrations
                 UPDATE categories
                 SET islabor = true
                 WHERE issystem = true AND name IN ('Bonificacion', 'Comisiones');
+
+                -- Vigencia: las reglas preexistentes arrancan el primer día de su mes de creación.
+                UPDATE discountrules
+                SET validfrom = date_trunc('month', createdat);
             ");
         }
 
@@ -168,6 +187,14 @@ namespace ExpensesTracker.api.Migrations
 
             migrationBuilder.DropColumn(
                 name: "linkeddescription",
+                table: "discountrules");
+
+            migrationBuilder.DropColumn(
+                name: "validfrom",
+                table: "discountrules");
+
+            migrationBuilder.DropColumn(
+                name: "validto",
                 table: "discountrules");
         }
     }

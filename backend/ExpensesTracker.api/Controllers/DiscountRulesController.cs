@@ -46,7 +46,9 @@ namespace ExpensesTracker.api.Controllers
                 FixedAmount = dto.FixedAmount,
                 LinkedCategoryId = dto.LinkedCategoryId,
                 LinkedDescription = dto.LinkedDescription,
-                IsExpected = dto.IsExpected
+                IsExpected = dto.IsExpected,
+                ValidFrom = dto.ValidFrom ?? default,
+                ValidTo = dto.ValidTo
             };
 
             var (created, error, statusCode) = await _discountRuleService.CreateAsync(rule);
@@ -88,7 +90,9 @@ namespace ExpensesTracker.api.Controllers
                 FixedAmount = dto.FixedAmount,
                 LinkedCategoryId = dto.LinkedCategoryId,
                 LinkedDescription = dto.LinkedDescription,
-                IsExpected = dto.IsExpected
+                IsExpected = dto.IsExpected,
+                ValidFrom = dto.ValidFrom ?? default,
+                ValidTo = dto.ValidTo
             };
 
             var (ok, error, statusCode) = await _discountRuleService.UpdateAsync(rule);
@@ -189,6 +193,8 @@ namespace ExpensesTracker.api.Controllers
                 LinkedDescription = rule.LinkedDescription,
                 IsExpected = rule.IsExpected,
                 IsArchived = rule.IsArchived,
+                ValidFrom = rule.ValidFrom,
+                ValidTo = rule.ValidTo,
                 CreatedAt = rule.CreatedAt
             };
         }
