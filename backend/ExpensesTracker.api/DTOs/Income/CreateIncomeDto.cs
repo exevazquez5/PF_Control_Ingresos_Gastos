@@ -6,6 +6,8 @@ namespace ExpensesTracker.api.Dtos.Income
     {
         [Required]
         public decimal Amount { get; set; }
+        public decimal? GrossAmount { get; set; }
+        public bool IsRecurring { get; set; }
         [Required]
         public string Description { get; set; }
         [Required]

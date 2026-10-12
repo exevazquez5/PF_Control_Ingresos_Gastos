@@ -19,6 +19,10 @@ namespace ExpensesTracker.api.Controllers
         private readonly IIncomeService _incomeService;
         private readonly ICategoryService _categoryService;
 
+        // Límite de monto por ingreso (D5): el literal debe ser idéntico al del frontend
+        public const decimal MaxAmount = 10000000m;
+        public const string MaxAmountMessage = "El monto no puede exceder $10,000,000";
+
         public IncomesController(IIncomeService incomeService, ICategoryService categoryService)
         {
             _incomeService = incomeService;
@@ -54,6 +58,8 @@ namespace ExpensesTracker.api.Controllers
             {
                 Id = i.Id,
                 Amount = i.Amount,
+                GrossAmount = i.GrossAmount,
+                IsRecurring = i.IsRecurring,
                 Description = i.Description,
                 Date = i.Date,
                 CategoryId = i.CategoryId,
@@ -87,6 +93,8 @@ namespace ExpensesTracker.api.Controllers
             {
                 Id = income.Id,
                 Amount = income.Amount,
+                GrossAmount = income.GrossAmount,
+                IsRecurring = income.IsRecurring,
                 Description = income.Description,
                 Date = income.Date,
                 CategoryId = income.CategoryId,
@@ -149,6 +157,8 @@ namespace ExpensesTracker.api.Controllers
             {
                 Id = i.Id,
                 Amount = i.Amount,
+                GrossAmount = i.GrossAmount,
+                IsRecurring = i.IsRecurring,
                 Description = i.Description,
                 Date = i.Date,
                 CategoryId = i.CategoryId,
@@ -179,6 +189,10 @@ namespace ExpensesTracker.api.Controllers
             if (decimal.Round(dto.Amount, 2) != dto.Amount)
                 return BadRequest("El monto no puede tener m�s de 2 decimales.");
 
+            // ? Validar l�mite de monto (D5)
+            if (dto.Amount > MaxAmount)
+                return BadRequest(MaxAmountMessage);
+
             // ? Validar que la descripci�n no est� vac�a ni sea solo espacios
             if (string.IsNullOrWhiteSpace(dto.Description))
                 return BadRequest("La descripci�n no puede estar vac�a ni contener solo espacios.");
@@ -203,6 +217,8 @@ namespace ExpensesTracker.api.Controllers
             var income = new Models.Income
             {
                 Amount = dto.Amount,
+                GrossAmount = dto.GrossAmount,
+                IsRecurring = dto.IsRecurring,
                 Description = dto.Description,
                 Date = dto.Date,
                 CategoryId = dto.CategoryId,
@@ -215,6 +231,8 @@ namespace ExpensesTracker.api.Controllers
             {
                 Id = created.Id,
                 Amount = created.Amount,
+                GrossAmount = created.GrossAmount,
+                IsRecurring = created.IsRecurring,
                 Description = created.Description,
                 Date = created.Date,
                 CategoryId = created.CategoryId,
@@ -251,6 +269,10 @@ namespace ExpensesTracker.api.Controllers
             if (decimal.Round(dto.Amount, 2) != dto.Amount)
                 return BadRequest("El monto no puede tener m�s de 2 decimales.");
 
+            // ? Validar l�mite de monto (D5)
+            if (dto.Amount > MaxAmount)
+                return BadRequest(MaxAmountMessage);
+
             // ? Validar que la descripci�n no est� vac�a ni sea solo espacios
             if (string.IsNullOrWhiteSpace(dto.Description))
                 return BadRequest("La descripci�n no puede estar vac�a ni contener solo espacios.");
@@ -278,6 +300,8 @@ namespace ExpensesTracker.api.Controllers
                 return StatusCode(403, "No puedes modificar ingresos de otro usuario.");
 
             incomeToUpdate.Amount = dto.Amount;
+            incomeToUpdate.GrossAmount = dto.GrossAmount;
+            incomeToUpdate.IsRecurring = dto.IsRecurring;
             incomeToUpdate.Description = dto.Description;
             incomeToUpdate.Date = dto.Date;
             incomeToUpdate.CategoryId = dto.CategoryId;
@@ -362,6 +386,8 @@ namespace ExpensesTracker.api.Controllers
             {
                 Id = i.Id,
                 Amount = i.Amount,
+                GrossAmount = i.GrossAmount,
+                IsRecurring = i.IsRecurring,
                 Description = i.Description,
                 Date = i.Date,
                 CategoryId = i.CategoryId,
