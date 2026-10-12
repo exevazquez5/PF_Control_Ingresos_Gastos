@@ -22,6 +22,7 @@ import { createCreditCard, getCreditCards } from "../services/creditCardsService
 import { getBudgetProgress, getCurrentBudget, getBudgetByPeriod, createBudget, updateBudget, deleteBudget } from "../services/budgetsService";
 import { getCategoriesFlat } from "../services/categoriesService";
 import { parseApiDate } from "../utils/date";
+import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } from "../utils/transactionTotals";
 
   const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
 
@@ -95,30 +96,23 @@ import { parseApiDate } from "../utils/date";
   const [showCategoriesSettings, setShowCategoriesSettings] = useState(false);
   const [currentType, setCurrentType] = useState('gasto');
 
-  // Calculamos el primer día del mes seleccionado y el siguiente
+  // Calculamos el primer día del mes seleccionado
   const today       = new Date();
   const startOfThis = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
-  const startOfNext = new Date(startOfThis.getFullYear(), startOfThis.getMonth() + 1, 1);
 
-  // Filtramos solo las transacciones de ese mes
-  const periodTransactions = transactions.filter(t => {
-    const d = parseApiDate(t.date);
-    return d >= startOfThis && d < startOfNext;
-  });
+  // Filtramos solo las transacciones de ese mes (mismo criterio que Detalle de Ingresos)
+  const periodTransactions = filterByMonth(transactions, startOfThis);
 
-  const totalIncome = periodTransactions.filter((t) => t.type === "ingreso").reduce((sum, t) => sum + t.amount, 0);
+  // Totales compartidos con Detalle de Ingresos (utils/transactionTotals.js)
+  const totalIncome = sumIncomes(periodTransactions);
 
-  const totalExpenses = periodTransactions.filter((t) => t.type === "gasto" || t.type === "cuota").reduce((sum, t) => sum + t.amount, 0);
+  const totalExpenses = sumExpenses(periodTransactions);
 
   const balance = totalIncome - totalExpenses;
 
-  const savingsExpenses = periodTransactions
-    .filter(t => (t.type === "gasto" || t.type === "cuota") && t.fundingSource === "Savings")
-    .reduce((sum, t) => sum + t.amount, 0);
+  const savingsExpenses = sumExpensesByFundingSource(periodTransactions, "Savings");
 
-  const creditExpenses = periodTransactions
-    .filter(t => (t.type === "gasto" || t.type === "cuota") && t.fundingSource === "Credit")
-    .reduce((sum, t) => sum + t.amount, 0);
+  const creditExpenses = sumExpensesByFundingSource(periodTransactions, "Credit");
 
   const calculateFirstDueDatePreview = (purchaseDate, card) => {
     if (!purchaseDate || !card) return "";

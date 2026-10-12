@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import axios from 'axios';
 import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { parseJwt } from "../utils/jwt";
 import { parseApiDate } from "../utils/date";
-import { X, Edit2, Trash2, ChevronLeft, ChevronRight, DollarSign, TrendingUp, List } from 'lucide-react';
+import { sumIncomes, filterByMonth, monthStart } from "../utils/transactionTotals";
+import { deriveSourceKey, formatSourceLabel } from "../utils/sourceKey";
+import { Edit2, Trash2, ChevronLeft, ChevronRight, ChevronDown, DollarSign, TrendingUp, List, CalendarDays } from 'lucide-react';
 
 import { useTransactionDelete } from '../hooks/useTransactionDelete';
 import { useTransactionEdit } from '../hooks/useTransactionEdit';
@@ -42,6 +43,8 @@ import api from '../api/axios.config.js';
     return IMPROVED_PALETTE[index % IMPROVED_PALETTE.length];
   }
 
+  const monthLabelKey = (date) => `${date.getFullYear()}-${date.getMonth()}`;
+
 export default function IncomesDashboard() {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
@@ -50,15 +53,11 @@ export default function IncomesDashboard() {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const [chartView, setChartView] = useState('pie');
-  // para el modal
-  const [showModal, setShowModal]       = useState(false);
-  const [showMonthlyModal, setShowMonthlyModal] = useState(false);
   const [monthOffset, setMonthOffset]   = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("Todos"); 
   const [orderByMethod, setOrderByMethod] = useState("fecha-reciente");
-
-
+  const [expandedMonthKey, setExpandedMonthKey] = useState(() => monthLabelKey(new Date()));
+  const [showModal, setShowModal]       = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -105,71 +104,36 @@ export default function IncomesDashboard() {
       currency: 'ARS'
     }).format(amount);
   };
-  
-  // últimos 5 movimientos
-  const lastFive = [...transactions]
-  .sort((a,b) => parseApiDate(b.date) - parseApiDate(a.date))
-  .slice(0,5);
-  
-  // para el modal: filtrar ingresos del mes
-  const zeroDate = new Date();
-  zeroDate.setDate(1);
-  zeroDate.setHours(0,0,0,0);
-  const baseMonth = new Date(zeroDate.getFullYear(), zeroDate.getMonth(), 1);
-  const selMonth = new Date(
-    baseMonth.getFullYear(),
-    baseMonth.getMonth() + monthOffset,
-    1
-  );
-  
-  const nextMonth = new Date(selMonth.getFullYear(), selMonth.getMonth()+1, 1);
 
-  const monthTransactions = transactions.filter(t => {
-  const d = parseApiDate(t.date);
-  return d >= selMonth && d < nextMonth;
-  });
+  // Mes seleccionado por el selector global
+  const today = new Date();
+  const baseMonth = monthStart(today);
+  const selMonth = new Date(baseMonth.getFullYear(), baseMonth.getMonth() + monthOffset, 1);
+  const selMonthLabel = selMonth.toLocaleDateString('es-AR', { year: 'numeric', month: 'long' });
+  const monthTransactions = filterByMonth(transactions, selMonth);
 
-  // Función para obtener las transacciones filtradas y ordenadas
-  const getFilteredAndSortedTransactions = () => {
-    // Primero filtramos por categoría
-    let filteredTransactions = selectedCategory === "Todos"
-      ? [...monthTransactions]
-      : [...monthTransactions].filter(tx => tx.categoryName === selectedCategory);
+  // Al cambiar el selector de mes, expandir ese mes en el historial
+  useEffect(() => {
+    setExpandedMonthKey(monthLabelKey(selMonth));
+  }, [monthOffset]);
 
-    // Luego aplicamos el ordenamiento según orderByMethod
-    const orderByDateLast = (a, b) => parseApiDate(b.date) - parseApiDate(a.date);
-    const orderByDateFirst = (a, b) => parseApiDate(a.date) - parseApiDate(b.date);
-    const orderByPriceMax = (a, b) => b.amount - a.amount;
-    const orderByPriceMin = (a, b) => a.amount - b.amount;
+  // KPIs del mes seleccionado
+  const monthTotal = sumIncomes(monthTransactions);
+  const monthCount = monthTransactions.length;
 
-    switch (orderByMethod) {
-      case 'fecha-reciente':
-        return filteredTransactions.sort(orderByDateLast);
-      case 'fecha-antiguo':
-        return filteredTransactions.sort(orderByDateFirst);
-      case 'precio-mayor':
-        return filteredTransactions.sort(orderByPriceMax);
-      case 'precio-menor':
-        return filteredTransactions.sort(orderByPriceMin);
-      default:
-        return filteredTransactions.sort(orderByDateLast);
-    }
-  };
-
-  // Reemplaza tu modalList actual con esto:
-  const modalList = getFilteredAndSortedTransactions();
-
-  // Simplifica la función ordenarTransacciones:
-  const ordenarTransacciones = (order) => {
-    setOrderByMethod(order);
-  };
+  // Promedio mensual histórico (meses con ingresos)
+  const monthsWithIncome = new Set(transactions.map(t => {
+    const d = parseApiDate(t.date);
+    return `${d.getFullYear()}-${d.getMonth()}`;
+  })).size;
+  const monthlyAverage = monthsWithIncome > 0 ? sumIncomes(transactions) / monthsWithIncome : 0;
 
   const categoryColorMap = categories.reduce((acc, cat, index) => {
       acc[cat.id] = getDistinctColor(index);
       return acc;
     }, {});
 
-  // datos para la torta
+  // datos para la torta (mes seleccionado)
   const chartData = categories.map((cat) => {
   const sum = monthTransactions.filter(t => t.categoryId === cat.id).reduce((a, b) => a + b.amount, 0);
   return {
@@ -180,12 +144,42 @@ export default function IncomesDashboard() {
   };
   }).filter(d => d.value > 0);
 
-  const totalIncome = modalList.reduce((sum, t) => sum + t.amount, 0);
+  // Historial (D7): del primer ingreso al mes actual (o al último con ingreso), sin meses anteriores al primero
+  const historyMonths = (() => {
+    if (transactions.length === 0) return [];
+    const times = transactions.map(t => parseApiDate(t.date).getTime());
+    const first = monthStart(new Date(Math.min(...times)));
+    const last = monthStart(new Date(Math.max(...times)));
+    const end = last > baseMonth ? last : baseMonth;
+    const months = [];
+    for (let cur = first; cur <= end; cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1)) {
+      months.push(cur);
+    }
+    return months.reverse(); // más reciente primero
+  })();
 
-  const totalIncomes = chartData
-  .reduce((a,b) => a + b.value, 0);
+  const sortTransactions = (list) => {
+    const sorted = [...list];
+    switch (orderByMethod) {
+      case 'fecha-antiguo':
+        return sorted.sort((a, b) => parseApiDate(a.date) - parseApiDate(b.date));
+      case 'precio-mayor':
+        return sorted.sort((a, b) => b.amount - a.amount);
+      case 'precio-menor':
+        return sorted.sort((a, b) => a.amount - b.amount);
+      default:
+        return sorted.sort((a, b) => parseApiDate(b.date) - parseApiDate(a.date));
+    }
+  };
 
-  const sortedChartData = [...chartData].sort((a, b) => b.value - a.value);
+  // Filtra y ordena los ingresos de un mes del historial (el total del mes siempre es sin filtro)
+  const getMonthRows = (monthDate) => {
+    const monthAll = filterByMonth(transactions, monthDate);
+    const visible = selectedCategory === "Todos"
+      ? monthAll
+      : monthAll.filter(tx => tx.categoryName === selectedCategory);
+    return { monthAll, rows: sortTransactions(visible) };
+  };
 
   const [formData, setFormData] = useState({
     type: 'ingreso',
@@ -206,7 +200,7 @@ export default function IncomesDashboard() {
   const [editingTransaction, setEditingTransaction] = useState(null);
 
   const handleDelete = useTransactionDelete(setConfirmDelete);
-  const handleEdit = useTransactionEdit(setEditingTransaction, setFormData, setShowModal, fetchCategoriesByType);
+  const handleEdit = useTransactionEdit(setEditingTransaction, setFormData, setShowModal, setEnCuotas, setCantidadCuotas);
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("Cambios guardados");
@@ -330,6 +324,17 @@ export default function IncomesDashboard() {
     }
   };
 
+  const selectClass = `
+        w-full p-3 rounded-lg
+        bg-gray-50/50 border-0 text-gray-900
+        ring-1 ring-gray-200/60
+        focus:ring-2 focus:ring-blue-500 focus:bg-white
+        hover:ring-gray-300/80 transition-all duration-150
+        dark:bg-gray-800/50 dark:text-gray-100
+        dark:ring-gray-700/60 dark:focus:bg-gray-800
+        dark:hover:ring-gray-600/80
+      `;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:bg-gradient-to-br dark:from-gray-900 dark:to-black p-4">
       <div className="max-w-7xl mx-auto">
@@ -347,329 +352,287 @@ export default function IncomesDashboard() {
           </button>
         </div>
 
-        {/* Layout principal en grid */}
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">    
+        {/* Selector de mes global */}
+        <div className="mb-6 flex items-center justify-center gap-3">
+          <div className="flex items-center gap-1 sm:gap-2 bg-gray-100 dark:bg-gray-700 rounded-full px-3 sm:px-6 py-2 sm:py-3">
+            <button
+              onClick={() => setMonthOffset(m => m - 1)}
+              className="p-1 sm:p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700 dark:text-white" />
+            </button>
+            <h5 className="text-sm sm:text-lg font-semibold dark:text-white min-w-[100px] sm:min-w-[140px] text-center px-1">
+              {selMonth.toLocaleDateString('es-AR', { 
+                year:'numeric', 
+                month: window.innerWidth < 640 ? 'short' : 'long' 
+              })}
+            </h5>
+            <button
+              onClick={() => setMonthOffset(m => m + 1)}
+              className="p-1 sm:p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
+            >
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700 dark:text-white" />
+            </button>
+          </div>
+          {monthOffset !== 0 && (
+            <button
+              onClick={() => setMonthOffset(0)}
+              className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              Hoy
+            </button>
+          )}
+        </div>
 
-          {/* Bloque 1: Resumen de Ingresos con Gráfico - Ocupa toda la fila superior en desktop */}
-          {chartView === 'pie' && (
-            <div className="xl:col-span-2 bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6">
-              {/* Header mejorado para móviles */}
-              <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
-                <div className="flex items-center space-x-3">
-                  <div className="bg-blue-100 dark:bg-blue-900 p-3 rounded-lg">
-                    <DollarSign className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+        {/* KPIs del mes seleccionado */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 border-l-4 border-green-500 flex items-center gap-4">
+            <div className="bg-green-100 dark:bg-green-900 p-3 rounded-lg flex-shrink-0">
+              <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Total del mes</p>
+              <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 truncate">
+                {formatCurrency(monthTotal)}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 border-l-4 border-blue-500 flex items-center gap-4">
+            <div className="bg-blue-100 dark:bg-blue-900 p-3 rounded-lg flex-shrink-0">
+              <List className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Ingresos del mes</p>
+              <p className="text-xl sm:text-2xl font-bold text-blue-600 dark:text-blue-400 truncate">
+                {monthCount}
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-5 border-l-4 border-purple-500 flex items-center gap-4">
+            <div className="bg-purple-100 dark:bg-purple-900 p-3 rounded-lg flex-shrink-0">
+              <TrendingUp className="w-6 h-6 text-purple-600 dark:text-purple-400" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Promedio mensual</p>
+              <p className="text-xl sm:text-2xl font-bold text-purple-600 dark:text-purple-400 truncate">
+                {formatCurrency(monthlyAverage)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Distribución por categoría del mes seleccionado */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mb-6">
+          <div className="flex items-center space-x-3 mb-6">
+            <div className="bg-blue-100 dark:bg-blue-900 p-3 rounded-lg">
+              <DollarSign className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">
+                Ingresos por Categoría
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-300 capitalize">{selMonthLabel}</p>
+            </div>
+          </div>
+
+          {chartData.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">Sin ingresos este mes.</p>
+          ) : (
+            <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 items-center">
+              {/* Leyenda del gráfico - Mejorada para móviles */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 order-2 lg:order-1">
+                {chartData.map((entry, index) => (
+                  <div key={index} className="flex items-center justify-start p-2 bg-gray-50 dark:bg-gray-700 rounded-lg space-x-2 dark:text-white">
+                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }}></div>
+                    <span className="text-sm sm:text-base truncate">{entry.name}</span>
                   </div>
-                  <h3 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">
-                    Ingresos por Categoría
-                  </h3>
-                </div>
-                
-                {/* Selector de Mes - Mejorado para móviles */}
-                <div className="flex items-center justify-center lg:justify-end">
-                  <div className="flex items-center gap-1 sm:gap-2 bg-gray-100 dark:bg-gray-700 rounded-full px-3 sm:px-6 py-2 sm:py-3">
-                    <button
-                      onClick={() => setMonthOffset(m => m - 1)}
-                      className="p-1 sm:p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
-                    >
-                      <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700 dark:text-white" />
-                    </button>
-                    <h5 className="text-sm sm:text-lg font-semibold dark:text-white min-w-[100px] sm:min-w-[140px] text-center px-1">
-                      {selMonth.toLocaleDateString('es-AR', { 
-                        year:'numeric', 
-                        month: window.innerWidth < 640 ? 'short' : 'long' 
-                      })}
-                    </h5>
-                    <button
-                      onClick={() => setMonthOffset(m => m + 1)}
-                      className="p-1 sm:p-2 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-full transition-colors"
-                    >
-                      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-gray-700 dark:text-white" />
-                    </button>
-                  </div>
-                </div>
+                ))}
               </div>
 
-              <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 items-center">
-                {/* Total de Ingresos */}
-                <div className="space-y-4 order-2 lg:order-1">
-                  <div className="bg-gradient-to-br from-green-50 to-green-100 dark:from-gray-700 dark:to-gray-600 rounded-xl p-4 border-l-4 border-green-500">
-                    <p className="text-green-700 dark:text-green-400 font-medium mb-2">Total Ingresos</p>
-                    <p className="text-2xl sm:text-3xl font-bold text-green-800 dark:text-green-300">
-                      {formatCurrency(totalIncome)}
-                    </p>
-                  </div>
-                  
-                  {/* Leyenda del gráfico - Mejorada para móviles */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
-                    {chartData.map((entry, index) => (
-                      <div key={index} className="flex items-center justify-start p-2 bg-gray-50 dark:bg-gray-700 rounded-lg space-x-2 dark:text-white">
-                        <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }}></div>
-                        <span className="text-sm sm:text-base truncate">{entry.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Gráfico de Torta - Responsivo */}
-                <div className="flex justify-center order-1 lg:order-2">
-                  <div className="w-full" style={{ height: window.innerWidth < 640 ? 200 : 280 }}>
-                    <ResponsiveContainer width="100%" height="100%">
-                      <RechartsPieChart>
-                        <Pie
-                          data={chartData}
-                          cx="50%"
-                          cy="50%"
-                          labelLine={false}
-                          outerRadius={window.innerWidth < 640 ? 80 : 120}
-                          dataKey="value"
-                          stroke="#ffffff"
-                          strokeWidth={2}
-                        >
-                          {chartData.map((entry, index) => (
-                            <Cell 
-                              key={`cell-${entry.categoryId}`} 
-                              fill={entry.color}
-                            />
-                          ))}
-                        </Pie>
-                        <Tooltip formatter={(value) => formatCurrency(value)} />
-                      </RechartsPieChart>
-                    </ResponsiveContainer>
-                  </div>
+              {/* Gráfico de Torta - Responsivo */}
+              <div className="flex justify-center order-1 lg:order-2">
+                <div className="w-full" style={{ height: window.innerWidth < 640 ? 200 : 280 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        outerRadius={window.innerWidth < 640 ? 80 : 120}
+                        dataKey="value"
+                        stroke="#ffffff"
+                        strokeWidth={2}
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell 
+                            key={`cell-${entry.categoryId}`} 
+                            fill={entry.color}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip formatter={(value) => formatCurrency(value)} />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
                 </div>
               </div>
             </div>
           )}
-
-          {/* Bloque 2: Últimos Movimientos - Parte inferior izquierda */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 w-full max-w-full">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-purple-100 dark:bg-purple-900 p-3 rounded-lg">
-                <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 text-purple-600 dark:text-purple-400" />
-              </div>
-              <h4 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">Últimos Movimientos</h4>
-            </div>
-            
-            <div className="space-y-3">
-              {lastFive.map(tx => (
-                <div key={tx.id} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors">
-                  <div className="flex-1 min-w-0 pr-3">
-                    <p className="font-medium text-gray-800 dark:text-white truncate">{tx.description}</p>
-                    <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">
-                      {parseApiDate(tx.date).toLocaleDateString('es-AR')}
-                    </p>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-green-600 dark:text-green-400 text-sm sm:text-base">
-                      +{formatCurrency(tx.amount)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            
-            <div className="mt-4 text-center">
-              <button
-                onClick={() => {
-                  setEditingTransaction(null);
-                  setShowMonthlyModal(true);
-                }}
-                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium hover:underline"
-              >
-                Ver todos los movimientos
-              </button>
-            </div>
-          </div>
-
-          {/* Bloque 3: Ingresos Agrupados por Categorías - Parte inferior derecha */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 flex flex-col">
-            <div className="flex items-center space-x-3 mb-4">
-              <div className="bg-orange-100 dark:bg-orange-900 p-3 rounded-lg">
-                <List className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600 dark:text-orange-400" />
-              </div>
-              <h4 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">Ingresos por Categoría</h4>
-            </div>
-            
-            <div className="grid grid-cols-1 gap-4 flex-1 overflow-y-auto">
-              {sortedChartData.map((c,i) => (
-                <div key={i} className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600 rounded-xl px-4 py-3 border-l-4 border-gray-300 dark:border-gray-500">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <div
-                        className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0"
-                        style={{ backgroundColor: c.color }}
-                      />
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-white truncate">{c.name}</h3>
-                  </div>
-                  <p className="text-base sm:text-lg font-bold text-gray-800 dark:text-white">
-                    {formatCurrency(c.value)}
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-300 mt-1">
-                    {((c.value / chartData.reduce((acc, item) => acc + item.value, 0)) * 100).toFixed(1)}% del total
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
         </div>
 
-        {/* Modal de Transacciones Mensuales */}
-        {showMonthlyModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] flex flex-col relative">
-              <div className="p-4 sm:p-6 pb-0">
-
-              {/* Filtros */}
-              <div>
-                <div className="flex items-end gap-4 mb-4">
-                  {/* Filtro de categoría */}
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-white">
-                      Filtrar por categoría
-                    </label>
-                    <select
-                      value={selectedCategory}
-                      onChange={(e) => setSelectedCategory(e.target.value)}
-                      className="
-                        w-full p-3 rounded-lg
-                        bg-gray-50/50 border-0 text-gray-900
-                        ring-1 ring-gray-200/60
-                        focus:ring-2 focus:ring-blue-500 focus:bg-white
-                        hover:ring-gray-300/80 transition-all duration-150
-                        dark:bg-gray-800/50 dark:text-gray-100
-                        dark:ring-gray-700/60 dark:focus:bg-gray-800
-                        dark:hover:ring-gray-600/80
-                      "
-                    >
-                      <option value="Todos">Todas las categorías</option>
-                      {categories.filter((cat) => cat.type === "ingreso").map((cat) => (
-                        <option key={cat.id} value={cat.name}>
-                          {cat.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Select para ordenamiento */}
-                  <div className="flex-shrink-0 min-w-[200px]">
-                    <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-white">
-                      Ordenar por
-                    </label>
-                    <select
-                      value={orderByMethod}
-                      onChange={(e) => ordenarTransacciones(e.target.value)}
-                      className="
-                        w-full p-3 rounded-lg
-                        bg-gray-50/50 border-0 text-gray-900
-                        ring-1 ring-gray-200/60
-                        focus:ring-2 focus:ring-blue-500 focus:bg-white
-                        hover:ring-gray-300/80 transition-all duration-150
-                        dark:bg-gray-800/50 dark:text-gray-100
-                        dark:ring-gray-700/60 dark:focus:bg-gray-800
-                        dark:hover:ring-gray-600/80
-                      "
-                    >
-                      <option value="fecha-reciente">Fecha: Más reciente</option>
-                      <option value="fecha-antiguo">Fecha: Más antiguo</option>
-                      <option value="precio-mayor">Precio: Mayor a menor</option>
-                      <option value="precio-menor">Precio: Menor a mayor</option>
-                    </select>
-                  </div>
-
-                  </div>
-              
-                <button
-                  onClick={() => setShowMonthlyModal(false)}
-                  className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 dark:hover:text-white z-10"
-                  >
-                  <X className="w-5 h-5 sm:w-6 sm:h-6" />
-                </button>
+        {/* Historial agrupado por mes */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
+            <div className="flex items-center space-x-3">
+              <div className="bg-orange-100 dark:bg-orange-900 p-3 rounded-lg">
+                <CalendarDays className="w-6 h-6 sm:w-8 sm:h-8 text-orange-600 dark:text-orange-400" />
               </div>
+              <h4 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-white">Historial de Ingresos</h4>
+            </div>
 
-              {/* Header del modal - Responsive */}
-              <div className="p-4 sm:p-6 border-b">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pr-8 sm:pr-12">
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setMonthOffset(m => m - 1)}
-                      className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
-                    >
-                      <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </button>
-                    <h5 className="text-base sm:text-lg font-semibold dark:text-white">
-                      {selMonth.toLocaleDateString('es-AR', { year:'numeric', month:'long' })}
-                    </h5>
-                    <button
-                      onClick={() => setMonthOffset(m => m + 1)}
-                      className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
-                    >
-                      <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
-                    </button>
-                  </div>
-                  <button
-                    onClick={() => setMonthOffset(0)}
-                    className="text-sm text-blue-600 hover:underline"
-                  >
-                    Hoy
-                  </button>
-                </div>
-              </div>
-
-              {/* Lista de transacciones - Scrollable */}
-              <div className="p-4 sm:p-6 flex-1 overflow-auto">
-                <div className="space-y-2">
-                  {modalList.length === 0 && (
-                    <p className="text-gray-500 dark:text-white text-center py-8">No hay ingresos este mes.</p>
-                  )}
-                  {modalList.map(tx => (
-                    <div key={tx.id} className="flex justify-between items-center py-3 border-b border-gray-200 dark:border-gray-600">
-                      <div className="flex-1 min-w-0 pr-3">
-                        <p className="font-medium dark:text-white text-sm sm:text-base truncate">{tx.description}</p>
-
-                        <p className="text-gray-500 dark:text-white text-xs sm:text-sm">
-                          {parseApiDate(tx.date).toLocaleDateString('es-AR')}
-                        </p>
-
-                        <p className="flex items-center gap-2 text-black text-sm dark:text-gray-300 text-sm">
-                          <span 
-                            className="w-3 h-3 rounded-full flex-shrink-0"
-                            style={{ backgroundColor: categoryColorMap[tx.categoryId] || '#6b7280' }}
-                          ></span>
-                          {tx.categoryName}
-                        </p>
-
-                        
-
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => handleEdit(tx)}
-                          className="text-blue-600 hover:text-blue-900 transition-colors p-1 hover:bg-blue-50 dark:hover:bg-gray-400 rounded"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(tx)}
-                          className="text-red-600 hover:text-red-900 transition-colors p-1 hover:bg-red-50 dark:hover:bg-gray-400 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                        </div>
-
-                      <div className="font-medium text-green-600 text-sm sm:text-base flex-shrink-0">
-                        +{formatCurrency(tx.amount)}
-                      </div>
-                    </div>
+            {/* Filtro de categoría + orden (se aplican a los meses expandidos) */}
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-3 sm:gap-4">
+              <div className="flex-1 min-w-[180px]">
+                <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-white">
+                  Filtrar por categoría
+                </label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="Todos">Todas las categorías</option>
+                  {allCategories.filter((cat) => cat.type === "ingreso").map((cat) => (
+                    <option key={cat.id} value={cat.name}>
+                      {cat.name}
+                    </option>
                   ))}
-                </div>
+                </select>
               </div>
 
+              <div className="flex-shrink-0 min-w-[180px]">
+                <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-white">
+                  Ordenar por
+                </label>
+                <select
+                  value={orderByMethod}
+                  onChange={(e) => setOrderByMethod(e.target.value)}
+                  className={selectClass}
+                >
+                  <option value="fecha-reciente">Fecha: Más reciente</option>
+                  <option value="fecha-antiguo">Fecha: Más antiguo</option>
+                  <option value="precio-mayor">Precio: Mayor a menor</option>
+                  <option value="precio-menor">Precio: Menor a mayor</option>
+                </select>
               </div>
             </div>
           </div>
-        )}
-        
+
+          {transactions.length === 0 ? (
+            <p className="text-gray-500 dark:text-gray-400 text-center py-8">
+              {loading ? "Cargando ingresos..." : "Todavía no hay ingresos registrados."}
+            </p>
+          ) : (
+            <div>
+              {historyMonths.map(monthDate => {
+                const key = monthLabelKey(monthDate);
+                const expanded = expandedMonthKey === key;
+                const { monthAll, rows } = getMonthRows(monthDate);
+                const label = monthDate.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+                const labelCapitalized = label.charAt(0).toUpperCase() + label.slice(1);
+
+                return (
+                  <div key={key} className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden mb-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedMonthKey(prev => (prev === key ? null : key))}
+                      className="w-full flex items-center justify-between gap-3 px-3 sm:px-4 py-3 bg-gray-50 dark:bg-gray-700/50 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                    >
+                      <span className="flex items-center gap-2 min-w-0">
+                        <ChevronDown className={`w-4 h-4 text-gray-500 flex-shrink-0 transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                        <span className="font-semibold text-gray-800 dark:text-white truncate">{labelCapitalized}</span>
+                        {monthAll.length === 0 && (
+                          <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap">Sin ingresos</span>
+                        )}
+                      </span>
+                      <span className="flex items-center gap-3 flex-shrink-0">
+                        <span className="text-xs text-gray-500 dark:text-gray-300 whitespace-nowrap">
+                          {monthAll.length} {monthAll.length === 1 ? 'ingreso' : 'ingresos'}
+                        </span>
+                        <span className="font-bold text-green-600 dark:text-green-400 text-sm sm:text-base whitespace-nowrap">
+                          {formatCurrency(sumIncomes(monthAll))}
+                        </span>
+                      </span>
+                    </button>
+
+                    {expanded && (
+                      <div className="px-2 sm:px-4 py-1">
+                        {monthAll.length === 0 && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                            Sin ingresos este mes.
+                          </p>
+                        )}
+                        {monthAll.length > 0 && rows.length === 0 && (
+                          <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                            Sin ingresos en esta categoría.
+                          </p>
+                        )}
+                        {rows.map(tx => (
+                          <div key={tx.id} className="flex items-center justify-between gap-3 py-3 border-b border-gray-100 dark:border-gray-700 last:border-b-0">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span
+                                  className="text-[11px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full"
+                                  title="Fuente derivada de la descripción"
+                                >
+                                  {formatSourceLabel(deriveSourceKey(tx.description)) || 'Sin fuente'}
+                                </span>
+                                <p className="font-medium text-gray-800 dark:text-white text-sm sm:text-base truncate">
+                                  {tx.description}
+                                </p>
+                              </div>
+                              <div className="flex items-center gap-3 mt-1 text-xs sm:text-sm text-gray-500 dark:text-gray-300">
+                                <span>{parseApiDate(tx.date).toLocaleDateString('es-AR')}</span>
+                                <span className="flex items-center gap-1.5">
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                                    style={{ backgroundColor: categoryColorMap[tx.categoryId] || '#6b7280' }}
+                                  ></span>
+                                  {tx.categoryName}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <div className="font-bold text-green-600 dark:text-green-400 text-sm sm:text-base whitespace-nowrap mr-1">
+                                +{formatCurrency(tx.amount)}
+                              </div>
+                              <button
+                                onClick={() => handleEdit(tx)}
+                                className="text-blue-600 hover:text-blue-900 transition-colors p-1 hover:bg-blue-50 dark:hover:bg-gray-400 rounded"
+                              >
+                                <Edit2 className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(tx)}
+                                className="text-red-600 hover:text-red-900 transition-colors p-1 hover:bg-red-50 dark:hover:bg-gray-400 rounded"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* Modal de Edición de Transacción */}

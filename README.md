@@ -72,6 +72,15 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 - Cloudflare Pages necesita la variable de entorno de build `VITE_API_BASE_URL=https://gastar-app.onrender.com/api` (dashboard de Pages).
 - Verificación post-merge: `/health` + `GET /api/<endpoint nuevo>` (404 → 401 indica código nuevo desplegado).
 
+## Detalle de Ingresos (`/ingresos`)
+
+- Selector de mes global con botón "Hoy" → KPIs del mes seleccionado: **total**, **cantidad de ingresos** y **promedio mensual histórico** (total ÷ meses con ingresos).
+- Distribución por categoría (torta + leyenda) del mes seleccionado.
+- **Historial agrupado por mes** (expandible): del primer ingreso hasta el mes actual; los meses vacíos se muestran como "Sin ingresos" (no se listan meses anteriores al primer ingreso).
+- Cada ingreso muestra su **fuente derivada** de la descripción (`utils/sourceKey.js`: sin fechas, números ni nombres de mes); se persistirá como entidad propia en una fase siguiente.
+- Filtro por categoría y orden se aplican dentro de cada mes expandido; los totales de mes/KPIs nunca se filtran.
+- Totales compartidos con el Dashboard vía `utils/transactionTotals.js` (`sumIncomes`/`sumExpenses`/`filterByMonth`): "Total Gastos" incluye cuotas en ambos lados.
+
 ## Estructura
 
 ```
