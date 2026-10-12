@@ -160,7 +160,7 @@ export default function TransactionModal({
                     ))}
                   </div>
                   <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    El monto guardado siempre es lo depositado. En modo Bruto lo depositado es el monto bruto del recibo (sin descuentos).
+                    En modo Neto registrás lo depositado. En modo Bruto registrás el bruto del recibo y las reglas configuradas estiman los descuentos para calcular el neto.
                   </p>
                 </div>
               </div>
@@ -169,7 +169,9 @@ export default function TransactionModal({
             {/* Monto */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
-                Monto
+                {formData.type === 'ingreso' && formData.mode === 'bruto'
+                  ? 'Monto bruto del recibo'
+                  : formData.type === 'ingreso' ? 'Monto depositado (neto)' : 'Monto'}
               </label>
               <CurrencyInput
                 value={formData.amount}

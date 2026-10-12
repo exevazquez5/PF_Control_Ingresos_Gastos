@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, ResponsiveContainer } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { parseJwt } from "../utils/jwt";
 import { parseApiDate, todayInputDate } from "../utils/date";
 import { incomeFields } from "../utils/transactionService";
 import { sumIncomes, filterByMonth, monthStart } from "../utils/transactionTotals";
-import { deriveSourceKey, formatSourceLabel, sourceLabel } from "../utils/sourceKey";
-import { Edit2, Trash2, ChevronLeft, ChevronRight, ChevronDown, DollarSign, TrendingUp, List, CalendarDays } from 'lucide-react';
+import { sourceLabel } from "../utils/sourceKey";
+import { Edit2, Trash2, ChevronLeft, ChevronRight, ChevronDown, DollarSign, TrendingUp, List, CalendarDays, Settings2 } from 'lucide-react';
 
 import { useTransactionDelete } from '../hooks/useTransactionDelete';
 import { useTransactionEdit } from '../hooks/useTransactionEdit';
@@ -14,6 +14,7 @@ import TransactionModal from "./TransactionModal";
 import ConfirmDeleteModal from "../dashboard/ConfirmDeleteModal";
 import SuccessModal from "../dashboard/SucessModal";
 import api from '../api/axios.config.js';
+import DiscountRuleManager from './DiscountRuleManager.jsx';
 
   // Paleta de colores más contrastante y distintiva
   const IMPROVED_PALETTE = [
@@ -61,6 +62,7 @@ export default function IncomesDashboard() {
   const [orderByMethod, setOrderByMethod] = useState("fecha-reciente");
   const [expandedMonthKey, setExpandedMonthKey] = useState(() => monthLabelKey(new Date()));
   const [showModal, setShowModal]       = useState(false);
+  const [showDiscountManager, setShowDiscountManager] = useState(false);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -134,21 +136,26 @@ export default function IncomesDashboard() {
   // Mes seleccionado por el selector global
   const today = new Date();
   const baseMonth = monthStart(today);
-  const selMonth = new Date(baseMonth.getFullYear(), baseMonth.getMonth() + monthOffset, 1);
+  const baseYear = baseMonth.getFullYear();
+  const baseMonthIndex = baseMonth.getMonth();
+  const selMonth = useMemo(
+    () => new Date(baseYear, baseMonthIndex + monthOffset, 1),
+    [baseYear, baseMonthIndex, monthOffset]
+  );
   const selMonthLabel = selMonth.toLocaleDateString('es-AR', { year: 'numeric', month: 'long' });
   const monthTransactions = filterByMonth(transactions, selMonth);
 
   // Al cambiar el selector de mes, expandir ese mes en el historial
   useEffect(() => {
     setExpandedMonthKey(monthLabelKey(selMonth));
-  }, [monthOffset]);
+  }, [selMonth]);
 
   // Cargar descuentos del mes seleccionado (Fase 3.5a)
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token || !userId) return;
     fetchMonthDiscounts(token, selMonth.getFullYear(), selMonth.getMonth() + 1);
-  }, [monthOffset, userId]);
+  }, [selMonth, userId]);
 
   // KPIs del mes seleccionado
   const monthTotal = sumIncomes(monthTransactions);
@@ -237,19 +244,16 @@ export default function IncomesDashboard() {
 
   const [confirmDelete, setConfirmDelete] = useState({ show: false, target: null, type: "" });
   const [editingTransaction, setEditingTransaction] = useState(null);
+  const [enCuotas, setEnCuotas] = useState(false);
+  const [cantidadCuotas, setCantidadCuotas] = useState(1);
+  const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
+  const [formError, setFormError] = useState('');
 
   const handleDelete = useTransactionDelete(setConfirmDelete);
   const handleEdit = useTransactionEdit(setEditingTransaction, setFormData, setShowModal, setEnCuotas, setCantidadCuotas);
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("Cambios guardados");
-  const [enCuotas, setEnCuotas] = useState(false);
-  const [cantidadCuotas, setCantidadCuotas] = useState(1);
-  const [fechaInicioCuotas, setFechaInicioCuotas] = useState('');
-  const [formError, setFormError] = useState('');
-
-
-
   const resetForm = () => {
     setFormData({
       type: 'ingreso',
@@ -277,6 +281,11 @@ export default function IncomesDashboard() {
     
     if (!formData.amount || !formData.categoryId || !formData.date || !formData.description) {
       setFormError("Completa todos los campos obligatorios");
+      return;
+    }
+    if (formData.type === 'ingreso' && formData.mode === 'neto' && formData.grossAmount
+      && Number(formData.grossAmount) < Number(formData.amount)) {
+      setFormError('El bruto del recibo debe ser mayor o igual al monto depositado.');
       return;
     }
     
@@ -362,6 +371,8 @@ export default function IncomesDashboard() {
       
       // Recargar los datos para asegurar que todo está actualizado
       fetchIncomes(token, userId);
+      fetchIncomeSources(token);
+      fetchMonthDiscounts(token, selMonth.getFullYear(), selMonth.getMonth() + 1);
       
     } catch (error) {
       console.error("Error al guardar la transacción:", error);
@@ -389,12 +400,21 @@ export default function IncomesDashboard() {
           <div>
             <h1 className="text-2xl font-bold text-gray-800 mb-2 dark:text-white">Detalle de Ingresos</h1>
           </div>
-          <button
-            onClick={() => navigate('/dashboard')}
-            className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-lg w-full sm:w-auto"
-          >
-            Volver al Inicio
-          </button>
+          <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+            <button
+              type="button"
+              onClick={() => setShowDiscountManager(true)}
+              className="flex items-center justify-center gap-2 bg-white dark:bg-gray-800 text-blue-700 dark:text-blue-300 px-5 py-3 rounded-lg font-medium border border-blue-200 dark:border-gray-600 hover:bg-blue-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Settings2 className="w-4 h-4" /> Administrar descuentos
+            </button>
+            <button
+              onClick={() => navigate('/dashboard')}
+              className="bg-blue-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-blue-700 transition-all duration-200 shadow-lg"
+            >
+              Volver al Inicio
+            </button>
+          </div>
         </div>
 
         {/* Selector de mes global */}
@@ -436,7 +456,7 @@ export default function IncomesDashboard() {
               <DollarSign className="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Total del mes (bruto)</p>
+              <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-300">Ingresos registrados</p>
               <p className="text-xl sm:text-2xl font-bold text-green-600 dark:text-green-400 truncate">
                 {formatCurrency(monthTotal)}
               </p>
@@ -537,10 +557,13 @@ export default function IncomesDashboard() {
                         <div key={regla.id} className="flex items-center justify-between gap-2 text-sm text-gray-600 dark:text-gray-300">
                           <span className="truncate">
                             {regla.name}
+                            {regla.isExpected && <span className="text-amber-600 dark:text-amber-400"> (esperado)</span>}
                             {!regla.deduce && <span className="text-gray-400 dark:text-gray-500"> (informativa)</span>}
                           </span>
                           <span className="whitespace-nowrap">
-                            {regla.requiereBruto
+                            {regla.isExpected && regla.tipo === 'vinculada' && regla.monto == null
+                              ? 'Pendiente de gasto'
+                              : regla.requiereBruto
                               ? 'requiere el bruto del recibo'
                               : formatCurrency(regla.monto || 0)}
                           </span>
@@ -621,7 +644,7 @@ export default function IncomesDashboard() {
                         stroke="#ffffff"
                         strokeWidth={2}
                       >
-                        {chartData.map((entry, index) => (
+                        {chartData.map((entry) => (
                           <Cell 
                             key={`cell-${entry.categoryId}`} 
                             fill={entry.color}
@@ -790,6 +813,22 @@ export default function IncomesDashboard() {
 
       </div>
 
+      {showDiscountManager && (
+        <DiscountRuleManager
+          sources={incomeSources}
+          expenseCategories={allCategories.filter(category => category.type === 'gasto')}
+          onClose={() => setShowDiscountManager(false)}
+          onSourcesChanged={() => {
+            const token = localStorage.getItem('token');
+            if (token) fetchIncomeSources(token);
+          }}
+          onChanged={() => {
+            const token = localStorage.getItem('token');
+            if (token) fetchMonthDiscounts(token, selMonth.getFullYear(), selMonth.getMonth() + 1);
+          }}
+        />
+      )}
+
       {/* Modal de Edición de Transacción */}
         {showModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -835,6 +874,8 @@ export default function IncomesDashboard() {
                 
                 // Actualizar la lista de transacciones
                 setTransactions(prev => prev.filter(t => t.id !== item.id));
+                fetchIncomeSources(token);
+                fetchMonthDiscounts(token, selMonth.getFullYear(), selMonth.getMonth() + 1);
                 
                 // Cerrar el modal de confirmación
                 setConfirmDelete({ show: false, target: null });

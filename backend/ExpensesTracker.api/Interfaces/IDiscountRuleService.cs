@@ -5,7 +5,7 @@ namespace ExpensesTracker.api.Interfaces
 {
     public interface IDiscountRuleService
     {
-        Task<List<DiscountRule>> GetByUserIdAsync(int userId, int? sourceId = null);
+        Task<List<DiscountRule>> GetByUserIdAsync(int userId, int? sourceId = null, bool includeArchived = false);
         Task<DiscountRule?> GetByIdAsync(int id);
         Task<(DiscountRule? Rule, string? Error, int StatusCode)> CreateAsync(DiscountRule rule);
         Task<(bool Ok, string? Error, int StatusCode)> UpdateAsync(DiscountRule rule);

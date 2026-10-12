@@ -23,9 +23,9 @@ namespace ExpensesTracker.api.Services
             _context = context;
         }
 
-        public async Task<List<DiscountRule>> GetByUserIdAsync(int userId, int? sourceId = null)
+        public async Task<List<DiscountRule>> GetByUserIdAsync(int userId, int? sourceId = null, bool includeArchived = false)
         {
-            var query = _context.DiscountRules
+            var query = (includeArchived ? _context.DiscountRules.IgnoreQueryFilters() : _context.DiscountRules)
                 .Include(r => r.IncomeSource)
                 .Include(r => r.LinkedCategory)
                 .Where(r => r.UserId == userId);
@@ -407,6 +407,7 @@ namespace ExpensesTracker.api.Services
                     Monto = monto,
                     Deduce = deduce,
                     RequiereBruto = requiereBruto,
+                    IsExpected = rule.IsExpected,
                     GastosVinculados = gastosVinculados
                 });
 
