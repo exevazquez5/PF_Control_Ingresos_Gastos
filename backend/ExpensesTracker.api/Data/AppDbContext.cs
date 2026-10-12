@@ -20,9 +20,6 @@ namespace ExpensesTracker.api.Data
         public DbSet<Budget> Budgets { get; set; }
         public DbSet<BudgetCategory> BudgetCategories { get; set; }
 
-        public DbSet<Salary> Salaries { get; set; }
-        public DbSet<SalaryDeduction> SalaryDeductions { get; set; }
-
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -104,40 +101,6 @@ namespace ExpensesTracker.api.Data
 
             modelBuilder.Entity<Category>()
                 .HasQueryFilter(c => !c.IsArchived);
-
-            modelBuilder.Entity<Salary>()
-                .HasOne(s => s.User)
-                .WithMany()
-                .HasForeignKey(s => s.UserId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<Salary>()
-                .HasOne(s => s.Income)
-                .WithOne()
-                .HasForeignKey<Salary>(s => s.IncomeId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<Salary>()
-                .HasIndex(s => new { s.UserId, s.Date });
-
-            modelBuilder.Entity<SalaryDeduction>()
-                .HasOne(d => d.Salary)
-                .WithMany(s => s.Deductions)
-                .HasForeignKey(d => d.SalaryId)
-                .OnDelete(DeleteBehavior.Cascade);
-
-            modelBuilder.Entity<SalaryDeduction>()
-                .HasOne(d => d.Expense)
-                .WithMany()
-                .HasForeignKey(d => d.ExpenseId)
-                .OnDelete(DeleteBehavior.Restrict);
-
-            modelBuilder.Entity<SalaryDeduction>()
-                .HasIndex(d => new { d.SalaryId, d.ExpenseId })
-                .IsUnique();
-
-            modelBuilder.Entity<Salary>()
-                .HasQueryFilter(s => !s.IsDeleted);
 
             // All date columns are `timestamp without time zone`, which Npgsql maps to
             // DateTime with Kind=Unspecified. Normalize any Utc/Local Kind (e.g. DateTime.UtcNow

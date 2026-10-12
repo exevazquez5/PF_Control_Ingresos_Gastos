@@ -1,6 +1,6 @@
 # GastAr App — Control de Ingresos y Gastos
 
-Aplicación personal para registrar ingresos, gastos, tarjetas de crédito, presupuestos y sueldos (bruto vs. neto).
+Aplicación personal para registrar ingresos, gastos, tarjetas de crédito y presupuestos.
 
 ## Stack
 
@@ -61,6 +61,7 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 - Crear una nueva: `cd backend/ExpensesTracker.api; dotnet ef migrations add <Nombre>`
 - Se aplican **solas al arrancar** el backend (`MigrateAsync` con reintentos).
 - La baseline `20260507022428_AddParentCategoryHierarchy` coincide con el historial de PROD: **no renombrar IDs** ni editar migraciones ya aplicadas.
+- `20261012024329_RemoveSalaryTables` elimina `salarydeductions` y `salaries` (verificadas vacías en PROD antes de eliminar la sección Sueldos).
 - La tabla de historial es `__efmigrationshistory` (minúsculas; fijado en `Program.cs` con `MigrationsHistoryTable`).
 
 ## Ramas, CI y despliegue
@@ -71,21 +72,21 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 - Cloudflare Pages necesita la variable de entorno de build `VITE_API_BASE_URL=https://gastar-app.onrender.com/api` (dashboard de Pages).
 - Verificación post-merge: `/health` + `GET /api/<endpoint nuevo>` (404 → 401 indica código nuevo desplegado).
 
-## Sección Sueldos (bruto vs. neto)
+## Detalle de Ingresos (`/ingresos`)
 
-- Ruta `/sueldos` (botón "Sueldos" en el Dashboard).
-- Cada sueldo crea un **ingreso por BRUTO** (categoría sistema `Salario`): los reportes y el dashboard no cambian.
-- Las **deducciones** (prepaga, monotributo, VEP IIBB, etc.) son gastos ya existentes elegidos en el formulario: solo se vinculan con un monto snapshot, **no modifican ni duplican tus gastos**.
-- Neto = bruto − deducciones: KPI estimado guardado en `salaries.netamount` (el ingreso registrado sigue siendo el bruto).
-- Endpoints: `GET/POST/PUT/DELETE /api/Salaries` (borrado lógico del sueldo y de su ingreso).
-- Tablas: `salaries`, `salarydeductions` (migración `20261011225118_AddSalaries`).
+- Selector de mes global con botón "Hoy" → KPIs del mes seleccionado: **total**, **cantidad de ingresos** y **promedio mensual histórico** (total ÷ meses con ingresos).
+- Distribución por categoría (torta + leyenda) del mes seleccionado.
+- **Historial agrupado por mes** (expandible): del primer ingreso hasta el mes actual; los meses vacíos se muestran como "Sin ingresos" (no se listan meses anteriores al primer ingreso).
+- Cada ingreso muestra su **fuente derivada** de la descripción (`utils/sourceKey.js`: sin fechas, números ni nombres de mes); se persistirá como entidad propia en una fase siguiente.
+- Filtro por categoría y orden se aplican dentro de cada mes expandido; los totales de mes/KPIs nunca se filtran.
+- Totales compartidos con el Dashboard vía `utils/transactionTotals.js` (`sumIncomes`/`sumExpenses`/`filterByMonth`): "Total Gastos" incluye cuotas en ambos lados.
 
 ## Estructura
 
 ```
 ├── frontend/                     # React SPA
 │   └── src/
-│       ├── features/             # páginas (Login, Incomes, Expenses, Sueldos, ...)
+│       ├── features/             # páginas (Login, Incomes, Expenses, ...)
 │       ├── dashboard/            # Dashboard, Header, modales, charts
 │       ├── services/             # clientes API por dominio (axios)
 │       └── components/           # formularios/listados reutilizables
