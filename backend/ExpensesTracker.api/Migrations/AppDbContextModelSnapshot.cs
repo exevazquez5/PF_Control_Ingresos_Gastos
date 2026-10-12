@@ -325,9 +325,17 @@ namespace ExpensesTracker.api.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<decimal?>("GrossAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("grossamount");
+
                     b.Property<bool>("IsDeleted")
                         .HasColumnType("boolean")
                         .HasColumnName("isdeleted");
+
+                    b.Property<bool>("IsRecurring")
+                        .HasColumnType("boolean")
+                        .HasColumnName("isrecurring");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer")

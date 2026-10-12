@@ -51,4 +51,13 @@ export function parseApiDate(value) {
   return new Date(NaN);
 }
 
+// Hoy en formato "YYYY-MM-DD" (zona local, para <input type="date">)
+export function todayInputDate() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export default parseApiDate;

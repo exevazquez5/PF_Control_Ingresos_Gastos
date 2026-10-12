@@ -1,5 +1,10 @@
 import { useState } from 'react';
 import formatCurrency from "../utils/format.js"
+import CurrencyInput from "../components/CurrencyInput.jsx";
+import CategoryCombobox from "../components/CategoryCombobox.jsx";
+import RecurringToggle from "../components/RecurringToggle.jsx";
+import { MAX_TRANSACTION_AMOUNT, MAX_AMOUNT_MESSAGE } from "../utils/limits.js";
+import { isLaborCategory } from "../utils/laborCategories.js";
 
 export default function TransactionModal({
   showModal,
@@ -22,6 +27,7 @@ export default function TransactionModal({
   totalIncome = 0
 }) {
   const [showFundingSuggestion, setShowFundingSuggestion] = useState(false);
+  const [showGross, setShowGross] = useState(false);
 
   if (!showModal) return null;
 
@@ -53,7 +59,8 @@ export default function TransactionModal({
                 value={formData.type}
                 onChange={(e) => {
                   const newType = e.target.value;
-                  setFormData({ ...formData, type: newType, categoryId: "" });
+                  setFormData({ ...formData, type: newType, categoryId: "", grossAmount: "", isRecurring: false });
+                  setShowGross(false);
 
                   if (e.target.value === "ingreso") {
                     setEnCuotas(false);
@@ -72,57 +79,88 @@ export default function TransactionModal({
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
                 Categoría
               </label>
-              <select
+              <CategoryCombobox
+                categories={categories}
+                type={formData.type}
                 value={formData.categoryId}
-                onChange={(e) =>
-                  setFormData({ ...formData, categoryId: parseInt(e.target.value) })
-                }
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                required
-              >
-                <option value="">Seleccionar categoría</option>
-                {categories
-                  .filter(cat => cat.type === formData.type && !cat.isArchived)
-                  .map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.icon ? `${cat.icon} ` : ''}{cat.name}{cat.parentCategoryName ? ` (${cat.parentCategoryName})` : ''}
-                    </option>
-                  ))}
-              </select>
+                onChange={(id) => {
+                  const cat = categories.find(c => c.id === id);
+                  const laboral = isLaborCategory(cat?.name);
+                  const next = { ...formData, categoryId: id };
+                  if (!laboral) {
+                    next.grossAmount = "";
+                    setShowGross(false);
+                  }
+                  setFormData(next);
+                }}
+              />
             </div>
 
             {/* Monto */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
-                Monto (máximo $10,000,000)
+                Monto
               </label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                max="10000000"
+              <CurrencyInput
                 value={formData.amount}
-                onChange={(e) => {
-                  const value = parseFloat(e.target.value);
-                  if (value <= 10000000 || e.target.value === "") {
-                    setFormData({ ...formData, amount: e.target.value });
-                    if (totalIncome > 0 && value > totalIncome * 0.5 && formData.type === 'gasto' && formData.fundingSource === 'Income') {
-                      setShowFundingSuggestion(true);
-                    } else {
-                      setShowFundingSuggestion(false);
-                    }
+                onValueChange={(raw) => {
+                  const value = parseFloat(raw) || 0;
+                  setFormData({ ...formData, amount: raw });
+                  if (totalIncome > 0 && value > totalIncome * 0.5 && formData.type === 'gasto' && formData.fundingSource === 'Income') {
+                    setShowFundingSuggestion(true);
+                  } else {
+                    setShowFundingSuggestion(false);
                   }
                 }}
-                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="0.00"
+                className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                placeholder="0,00"
                 required
               />
-              {formData.amount > 10000000 && (
+              {Number(formData.amount) > MAX_TRANSACTION_AMOUNT && (
                 <p className="text-red-500 text-sm mt-1">
-                  El monto no puede exceder $10,000,000
+                  {MAX_AMOUNT_MESSAGE}
                 </p>
               )}
             </div>
+
+            {/* Bruto del recibo (D4): solo ingresos con categoría laboral */}
+            {formData.type === "ingreso" && isLaborCategory(categories.find(c => c.id === formData.categoryId)?.name) && (
+              <div className="border border-dashed border-gray-300 dark:border-gray-600 rounded-lg p-3">
+                {!showGross ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowGross(true)}
+                    className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                  >
+                    + Bruto del recibo (opcional)
+                  </button>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-sm font-medium text-gray-700 dark:text-white">
+                        Bruto del recibo
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setShowGross(false)}
+                        className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                      >
+                        Ocultar
+                      </button>
+                    </div>
+                    <CurrencyInput
+                      value={formData.grossAmount || ''}
+                      onValueChange={(raw) => setFormData({ ...formData, grossAmount: raw })}
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                      placeholder="0,00"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Monto bruto antes de descuentos (jubilación, prepaga, etc.).
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Sugerencia de funding source */}
             {showFundingSuggestion && formData.fundingSource === 'Income' && (
@@ -274,10 +312,18 @@ export default function TransactionModal({
               </div>
             )}
 
+            {/* Recurrencia (D10): solo se muestra para ingresos */}
+            {formData.type === "ingreso" && (
+              <RecurringToggle
+                checked={!!formData.isRecurring}
+                onChange={(v) => setFormData({ ...formData, isRecurring: v })}
+              />
+            )}
+
             {/* Descripción */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
-                Descripción
+                Descripción <span className="text-red-500">*</span>
               </label>
               <textarea
                 value={formData.description}
@@ -286,7 +332,7 @@ export default function TransactionModal({
                 }
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 rows="3"
-                placeholder="Descripción opcional..."
+                placeholder="Ej.: Sueldo, alquiler, freelance..."
               />
             </div>
 
@@ -309,7 +355,8 @@ export default function TransactionModal({
               <button
                 type="button"
                 onClick={handleSubmit}
-                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200"
+                disabled={Number(formData.amount) > MAX_TRANSACTION_AMOUNT}
+                className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-medium hover:from-blue-700 hover:to-purple-700 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {editingTransaction ? "Actualizar" : "Agregar"}
               </button>

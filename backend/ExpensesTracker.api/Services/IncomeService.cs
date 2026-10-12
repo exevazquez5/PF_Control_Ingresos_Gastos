@@ -58,6 +58,8 @@ public class IncomeService : IIncomeService
         if (existingIncome == null) return false;
 
         existingIncome.Amount = income.Amount;
+        existingIncome.GrossAmount = income.GrossAmount;
+        existingIncome.IsRecurring = income.IsRecurring;
         existingIncome.Description = income.Description;
         existingIncome.Date = income.Date;
         existingIncome.CategoryId = income.CategoryId;
