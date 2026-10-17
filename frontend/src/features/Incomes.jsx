@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { PieChart as RechartsPieChart, Cell, Pie, Tooltip, ResponsiveContainer } from 'recharts';
+import { Tooltip, ResponsiveContainer, CartesianGrid, XAxis, YAxis, LineChart, Line } from 'recharts';
 import { useNavigate } from 'react-router-dom';
 import { parseJwt } from "../utils/jwt";
 import { parseApiDate, todayInputDate } from "../utils/date";
@@ -56,8 +56,14 @@ export default function IncomesDashboard() {
   const [userId, setUserId] = useState(null);
   const [loading, setLoading] = useState(false);
   const [monthDiscounts, setMonthDiscounts] = useState(null);
+  const [usdOverview, setUsdOverview] = useState(null);
+  const [usdLoading, setUsdLoading] = useState(false);
+  const [usdPeriod, setUsdPeriod] = useState('12');
+  const [usdSource, setUsdSource] = useState('all');
 
   const [monthOffset, setMonthOffset]   = useState(0);
+  const [activeTab, setActiveTab] = useState('resumen');
+  const [historyPage, setHistoryPage] = useState(0);
   const [selectedCategory, setSelectedCategory] = useState("Todos"); 
   const [orderByMethod, setOrderByMethod] = useState("fecha-reciente");
   const [expandedMonthKey, setExpandedMonthKey] = useState(() => monthLabelKey(new Date()));
@@ -157,6 +163,72 @@ export default function IncomesDashboard() {
     fetchMonthDiscounts(token, selMonth.getFullYear(), selMonth.getMonth() + 1);
   }, [selMonth, userId]);
 
+  const usdRange = useMemo(() => {
+    const to = new Date(selMonth.getFullYear(), selMonth.getMonth() + 1, 0);
+    let from;
+    if (usdPeriod === 'MAX' && transactions.length) {
+      const first = transactions.reduce((min, item) => {
+        const date = parseApiDate(item.date);
+        return date < min ? date : min;
+      }, parseApiDate(transactions[0].date));
+      from = monthStart(first);
+    } else {
+      const count = usdPeriod === '3' ? 3 : usdPeriod === '6' ? 6 : 12;
+      from = new Date(selMonth.getFullYear(), selMonth.getMonth() - count + 1, 1);
+    }
+    return { from, to };
+  }, [selMonth, usdPeriod, transactions]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (!token || !userId) return;
+    let active = true;
+    setUsdLoading(true);
+    api.get('/Incomes/usd-overview', {
+      params: {
+        from: `${usdRange.from.getFullYear()}-${String(usdRange.from.getMonth() + 1).padStart(2, '0')}-01`,
+        to: `${usdRange.to.getFullYear()}-${String(usdRange.to.getMonth() + 1).padStart(2, '0')}-${String(usdRange.to.getDate()).padStart(2, '0')}`
+      },
+      headers: { Authorization: `Bearer ${token}` }
+    }).then(response => {
+      if (active) setUsdOverview(response.data);
+    }).catch(error => {
+      console.error('Error al obtener el análisis de ingresos en USD MEP:', error);
+      if (active) setUsdOverview(null);
+    }).finally(() => { if (active) setUsdLoading(false); });
+    return () => { active = false; };
+  }, [usdRange, userId, transactions]);
+
+  const usdFormatter = (amount) => new Intl.NumberFormat('es-AR', {
+    style: 'currency', currency: 'USD', maximumFractionDigits: 2
+  }).format(amount || 0);
+  const usdMonthMap = new Map((usdOverview?.months || []).map(month => [`${month.year}-${month.month}`, month]));
+  const usdMonths = (() => {
+    const months = [];
+    for (let date = new Date(usdRange.from.getFullYear(), usdRange.from.getMonth(), 1);
+      date <= usdRange.to; date = new Date(date.getFullYear(), date.getMonth() + 1, 1)) {
+      const month = usdMonthMap.get(`${date.getFullYear()}-${date.getMonth() + 1}`) || {
+        year: date.getFullYear(), month: date.getMonth() + 1, incomes: []
+      };
+      months.push(month);
+    }
+    return months;
+  })().map(month => ({
+    ...month,
+    incomes: month.incomes.filter(item => usdSource === 'all' || String(item.sourceId ?? 'none') === usdSource)
+  })).map(month => ({
+    ...month,
+    ars: month.incomes.reduce((sum, item) => sum + item.ars, 0),
+    usd: month.incomes.reduce((sum, item) => sum + (item.usd || 0), 0),
+    convertedCount: month.incomes.filter(item => item.usd != null).length,
+    incomeCount: month.incomes.length
+  }));
+  const usdTotal = usdMonths.reduce((sum, month) => sum + month.usd, 0);
+  const usdMonthCount = usdMonths.filter(month => month.incomeCount > 0).length;
+  const usdAverage = usdMonthCount ? usdTotal / usdMonthCount : 0;
+  const usdSources = [...new Map((usdOverview?.months || []).flatMap(month => month.incomes)
+    .map(item => [String(item.sourceId ?? 'none'), { id: String(item.sourceId ?? 'none'), name: item.sourceName }])).values()];
+
   // KPIs del mes seleccionado
   const monthTotal = sumIncomes(monthTransactions);
   const monthCount = monthTransactions.length;
@@ -174,17 +246,6 @@ export default function IncomesDashboard() {
       return acc;
     }, {});
 
-  // datos para la torta (mes seleccionado)
-  const chartData = categories.map((cat) => {
-  const sum = monthTransactions.filter(t => t.categoryId === cat.id).reduce((a, b) => a + b.amount, 0);
-  return {
-    name: cat.name,
-    value: sum,
-    color: categoryColorMap[cat.id],
-    categoryId: cat.id // ← Mantener referencia al ID original
-  };
-  }).filter(d => d.value > 0);
-
   // Historial (D7): del primer ingreso al mes actual (o al último con ingreso), sin meses anteriores al primero
   const historyMonths = (() => {
     if (transactions.length === 0) return [];
@@ -198,6 +259,12 @@ export default function IncomesDashboard() {
     }
     return months.reverse(); // más reciente primero
   })();
+  const historyPageSize = 12;
+  const historyPageCount = Math.ceil(historyMonths.length / historyPageSize);
+  const visibleHistoryMonths = historyMonths.slice(
+    historyPage * historyPageSize,
+    (historyPage + 1) * historyPageSize
+  );
 
   const sortTransactions = (list) => {
     const sorted = [...list];
@@ -417,6 +484,28 @@ export default function IncomesDashboard() {
           </div>
         </div>
 
+        <nav aria-label="Secciones de ingresos" className="mb-6 flex w-full flex-wrap gap-2 rounded-xl bg-gray-200 p-2 dark:bg-gray-800">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'resumen'}
+            onClick={() => setActiveTab('resumen')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition-colors ${activeTab === 'resumen' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-white dark:text-gray-200 dark:hover:bg-gray-700'}`}
+          >
+            <TrendingUp size={18} /> Resumen
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'historial'}
+            onClick={() => setActiveTab('historial')}
+            className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition-colors ${activeTab === 'historial' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-white dark:text-gray-200 dark:hover:bg-gray-700'}`}
+          >
+            <CalendarDays size={18} /> Historial
+          </button>
+        </nav>
+
+        {activeTab === 'resumen' && <>
         {/* Selector de mes global */}
         <div className="mb-6 flex items-center justify-center gap-3">
           <div className="flex items-center gap-1 sm:gap-2 bg-gray-100 dark:bg-gray-700 rounded-full px-3 sm:px-6 py-2 sm:py-3">
@@ -601,66 +690,102 @@ export default function IncomesDashboard() {
           </div>
         )}
 
-        {/* Distribución por categoría del mes seleccionado */}
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mb-6">
-          <div className="flex items-center space-x-3 mb-6">
-            <div className="bg-blue-100 dark:bg-blue-900 p-3 rounded-lg">
-              <DollarSign className="w-8 h-8 text-blue-600 dark:text-blue-400" />
-            </div>
+        {/* Ingresos valuados al dólar MEP histórico */}
+        <section className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6 mb-6">
+          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4 mb-5">
             <div>
-              <h3 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">
-                Ingresos por Categoría
-              </h3>
-              <p className="text-sm text-gray-500 dark:text-gray-300 capitalize">{selMonthLabel}</p>
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-800 dark:text-white">Tus ingresos medidos en USD MEP</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                Cada ingreso se convierte con la cotización MEP de venta vigente en su fecha.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {[
+                ['3', '3M'], ['6', '6M'], ['12', '1A'], ['MAX', 'MAX']
+              ].map(([value, label]) => (
+                <button key={value} type="button" onClick={() => setUsdPeriod(value)}
+                  aria-pressed={usdPeriod === value}
+                  className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${usdPeriod === value ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-700 dark:bg-gray-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-gray-600'}`}>
+                  {label}
+                </button>
+              ))}
+              {usdSources.length > 0 && (
+                <select value={usdSource} onChange={event => setUsdSource(event.target.value)}
+                  aria-label="Filtrar ingresos por fuente"
+                  className="ml-0 sm:ml-2 p-2 rounded-lg bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 text-gray-800 dark:text-white text-sm">
+                  <option value="all">Todas las fuentes</option>
+                  {usdSources.map(source => <option key={source.id} value={source.id}>{source.name}</option>)}
+                </select>
+              )}
             </div>
           </div>
 
-          {chartData.length === 0 ? (
-            <p className="text-gray-500 dark:text-gray-400 text-center py-8">Sin ingresos este mes.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+            <div className="rounded-xl border-l-4 border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 p-4">
+              <p className="text-sm text-gray-600 dark:text-gray-300">Ingresos convertidos en el período</p>
+              <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{usdFormatter(usdTotal)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Equivalente histórico del ingreso registrado</p>
+            </div>
+            <div className="rounded-xl border-l-4 border-blue-500 bg-blue-50 dark:bg-blue-950/30 p-4">
+              <p className="text-sm text-gray-600 dark:text-gray-300">Promedio mensual del período</p>
+              <p className="text-2xl font-bold text-blue-600 dark:text-blue-400">{usdFormatter(usdAverage)}</p>
+              <p className="text-xs text-gray-500 dark:text-gray-400">Promedia los meses con ingresos</p>
+            </div>
+          </div>
+
+          {usdOverview?.hasUnavailableRates && (
+            <p className="mb-4 rounded-lg bg-amber-50 dark:bg-amber-950/40 p-3 text-sm text-amber-800 dark:text-amber-300">
+              Algunos ingresos todavía no tienen una cotización histórica disponible; se muestran en ARS y quedan excluidos del total en USD.
+            </p>
+          )}
+          {usdLoading ? (
+            <p className="py-10 text-center text-gray-500 dark:text-gray-400">Cargando cotizaciones históricas…</p>
+          ) : !usdOverview ? (
+            <p className="py-10 text-center text-gray-500 dark:text-gray-400">No se pudo cargar el análisis en USD. Volvé a intentarlo cambiando el período.</p>
           ) : (
-            <div className="grid lg:grid-cols-2 gap-6 sm:gap-8 items-center">
-              {/* Leyenda del gráfico - Mejorada para móviles */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 order-2 lg:order-1">
-                {chartData.map((entry, index) => (
-                  <div key={index} className="flex items-center justify-start p-2 bg-gray-50 dark:bg-gray-700 rounded-lg space-x-2 dark:text-white">
-                    <div className="w-3 h-3 sm:w-4 sm:h-4 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }}></div>
-                    <span className="text-sm sm:text-base truncate">{entry.name}</span>
-                  </div>
+            <>
+              <div className="h-72 sm:h-96 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={usdMonths} margin={{ top: 8, right: 18, left: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#64748b" opacity={0.3} />
+                    <XAxis dataKey="month" tickFormatter={(month, index) => {
+                      const point = usdMonths[index];
+                      return point ? new Date(point.year, month - 1, 1).toLocaleDateString('es-AR', { month: 'short', year: '2-digit' }) : '';
+                    }} tick={{ fill: '#94a3b8', fontSize: 12 }} />
+                    <YAxis tickFormatter={value => `$${new Intl.NumberFormat('es-AR', { notation: 'compact', maximumFractionDigits: 1 }).format(value)}`} tick={{ fill: '#94a3b8', fontSize: 12 }} width={64} />
+                    <Tooltip labelFormatter={(month, payload) => payload?.[0]?.payload ? new Date(payload[0].payload.year, month - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' }) : ''}
+                      formatter={(value, _name, item) => [usdFormatter(value), `Ingresos${item.payload.convertedCount < item.payload.incomeCount ? ' (con cotización)' : ''}`]} />
+                    <Line type="monotone" dataKey="usd" name="Ingresos USD MEP" stroke="#10b981" strokeWidth={3} dot={{ r: 3 }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">Fuente: {usdOverview.provider}. Se usa el precio de venta (pesos por USD); la fecha efectiva de la cotización se conserva en cada ingreso.</p>
+              <div className="mt-5 divide-y divide-gray-200 dark:divide-gray-700">
+                {usdMonths.filter(month => month.incomeCount > 0).slice().reverse().map(month => (
+                  <details key={`${month.year}-${month.month}`} className="py-2">
+                    <summary className="cursor-pointer flex flex-wrap justify-between gap-2 text-sm">
+                      <span className="font-semibold text-gray-800 dark:text-white capitalize">{new Date(month.year, month.month - 1, 1).toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })} · {month.incomeCount} {month.incomeCount === 1 ? 'ingreso' : 'ingresos'}</span>
+                      <span className="text-gray-600 dark:text-gray-300">{formatCurrency(month.ars)} <span className="mx-1">→</span> <strong className="text-emerald-600 dark:text-emerald-400">{usdFormatter(month.usd)}</strong></span>
+                    </summary>
+                    <div className="mt-2 space-y-1 pl-2 sm:pl-4">
+                      {month.incomes.map(item => (
+                        <div key={item.id} className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-xs text-gray-600 dark:text-gray-300">
+                          <span>{item.description} · {item.sourceName}</span>
+                          <span>{formatCurrency(item.ars)} → {item.usd == null ? 'Cotización pendiente' : usdFormatter(item.usd)}{item.rate != null && <> · MEP venta {formatCurrency(item.rate)} ({new Date(item.quotedAt).toLocaleDateString('es-AR')})</>}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
                 ))}
               </div>
-
-              {/* Gráfico de Torta - Responsivo */}
-              <div className="flex justify-center order-1 lg:order-2">
-                <div className="w-full" style={{ height: window.innerWidth < 640 ? 200 : 280 }}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RechartsPieChart>
-                      <Pie
-                        data={chartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        outerRadius={window.innerWidth < 640 ? 80 : 120}
-                        dataKey="value"
-                        stroke="#ffffff"
-                        strokeWidth={2}
-                      >
-                        {chartData.map((entry) => (
-                          <Cell 
-                            key={`cell-${entry.categoryId}`} 
-                            fill={entry.color}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
+            </>
           )}
-        </div>
+        </section>
+
+        </>}
 
         {/* Historial agrupado por mes */}
+        {activeTab === 'historial' && (
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-4 sm:p-6">
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
             <div className="flex items-center space-x-3">
@@ -714,7 +839,7 @@ export default function IncomesDashboard() {
             </p>
           ) : (
             <div>
-              {historyMonths.map(monthDate => {
+              {visibleHistoryMonths.map(monthDate => {
                 const key = monthLabelKey(monthDate);
                 const expanded = expandedMonthKey === key;
                 const { monthAll, rows } = getMonthRows(monthDate);
@@ -809,7 +934,40 @@ export default function IncomesDashboard() {
               })}
             </div>
           )}
+
+          {historyPageCount > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                Página {historyPage + 1} de {historyPageCount} · 12 períodos por página
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistoryPage(page => Math.max(0, page - 1));
+                    setExpandedMonthKey(null);
+                  }}
+                  disabled={historyPage === 0}
+                  className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-gray-600 dark:text-gray-200 dark:hover:bg-gray-700"
+                >
+                  Anterior
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHistoryPage(page => Math.min(historyPageCount - 1, page + 1));
+                    setExpandedMonthKey(null);
+                  }}
+                  disabled={historyPage >= historyPageCount - 1}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
         </div>
+        )}
 
       </div>
 

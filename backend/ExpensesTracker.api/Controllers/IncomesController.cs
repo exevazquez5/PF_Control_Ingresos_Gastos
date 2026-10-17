@@ -1,5 +1,6 @@
 using ExpensesTracker.api.Dtos.Income;
 using ExpensesTracker.api.Interfaces;
+using ExpensesTracker.api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -19,16 +20,18 @@ namespace ExpensesTracker.api.Controllers
         private readonly IIncomeService _incomeService;
         private readonly ICategoryService _categoryService;
         private readonly IIncomeSourceService _incomeSourceService;
+        private readonly IncomeUsdService _incomeUsdService;
 
         // Límite de monto por ingreso (D5): el literal debe ser idéntico al del frontend
         public const decimal MaxAmount = 10000000m;
         public const string MaxAmountMessage = "El monto no puede exceder $10,000,000";
 
-        public IncomesController(IIncomeService incomeService, ICategoryService categoryService, IIncomeSourceService incomeSourceService)
+        public IncomesController(IIncomeService incomeService, ICategoryService categoryService, IIncomeSourceService incomeSourceService, IncomeUsdService incomeUsdService)
         {
             _incomeService = incomeService;
             _categoryService = categoryService;
             _incomeSourceService = incomeSourceService;
+            _incomeUsdService = incomeUsdService;
 
         }
 
@@ -268,6 +271,7 @@ namespace ExpensesTracker.api.Controllers
             };
 
             var created = await _incomeService.Create(income);
+            await _incomeUsdService.CaptureAsync(created);
 
             var result = new IncomeDto
             {
@@ -388,6 +392,8 @@ namespace ExpensesTracker.api.Controllers
             if (!updated)
                 return StatusCode(500, "Error updating income");
 
+            await _incomeUsdService.CaptureAsync(incomeToUpdate);
+
             return NoContent();
         }
 
@@ -460,6 +466,17 @@ namespace ExpensesTracker.api.Controllers
 
             var overview = await _incomeService.GetOverviewAsync(userId);
             return Ok(overview);
+        }
+
+        [Authorize]
+        [HttpGet("usd-overview")]
+        public async Task<ActionResult<object>> GetUsdOverview([FromQuery] DateTime from, [FromQuery] DateTime to)
+        {
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (claim == null || !int.TryParse(claim.Value, out var userId)) return Unauthorized();
+            if (to < from || (to - from).TotalDays > 4000) return BadRequest("El período solicitado no es válido.");
+            var result = await _incomeUsdService.GetOverviewAsync(userId, from.Date, to.Date);
+            return Ok(result);
         }
 
         [Authorize]

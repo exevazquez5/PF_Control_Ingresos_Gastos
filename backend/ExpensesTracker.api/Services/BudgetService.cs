@@ -160,9 +160,9 @@ namespace ExpensesTracker.api.Services
                     .Where(pc => pc.Expense.UserId == userId
                         && pc.Expense.FundingSource != FundingSource.Savings
                         && pc.Status == PagoCuotaStatus.Paid
-                        && pc.PaidAt.HasValue
-                        && pc.PaidAt >= periodStart
-                        && pc.PaidAt <= periodEnd)
+                        && (pc.AccountingDate ?? pc.PaidAt).HasValue
+                        && (pc.AccountingDate ?? pc.PaidAt) >= periodStart
+                        && (pc.AccountingDate ?? pc.PaidAt) <= periodEnd)
                     .GroupBy(pc => pc.Expense.CategoryId)
                     .Select(g => new { CategoryId = g.Key, Total = g.Sum(pc => pc.MontoCuota) })
                     .ToListAsync())

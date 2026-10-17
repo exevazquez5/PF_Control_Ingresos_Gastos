@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { parseJwt } from "../utils/jwt";
-import { X, Edit2, Trash2, ChevronLeft, ChevronRight, DollarSign, TrendingUp, List, CheckCircle } from 'lucide-react';
+import { X, Edit2, Trash2, ChevronLeft, ChevronRight, DollarSign, TrendingUp, List, CheckCircle, Users, ReceiptText } from 'lucide-react';
 import { useTransactionDelete } from '../hooks/useTransactionDelete';
 import { useTransactionEdit } from '../hooks/useTransactionEdit';
 import TransactionModal from "./TransactionModal";
@@ -22,6 +22,7 @@ import { getExpenses } from "../services/expensesService";
 import { fetchCuotasPendientes } from "../services/expensesService";
 import { pagarTodasCuotas } from "../services/expensesService";
 import api from '../api/axios.config.js';
+import ExpenseWorkspaceSections from './ExpenseWorkspaceSections';
 
 // Paleta de colores más contrastante y distintiva
 const IMPROVED_PALETTE = [
@@ -64,6 +65,7 @@ export default function ExpensesDashboard() {
 
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
+  const [reimbursements, setReimbursements] = useState([]);
   const [categories, setCategories] = useState([]);
   const [allCategories, setAllCategories] = useState([]);
   const [incomeSources, setIncomeSources] = useState([]);
@@ -87,6 +89,7 @@ export default function ExpensesDashboard() {
   const [showPayAllModal, setShowPayAllModal] = useState(false);
   const [orderByMethod, setOrderByMethod] = useState("fecha-reciente");
   const [error, setError] = useState(null);
+  const [activeSection, setActiveSection] = useState('movimientos');
 
   const [formData, setFormData] = useState({
     type: 'ingreso',
@@ -145,6 +148,15 @@ export default function ExpensesDashboard() {
         const txs = await getExpenses(uid, monthOffset); // <--- uid en vez de userId
         setTransactions(txs);
 
+        const selectedMonth = new Date(new Date().getFullYear(), new Date().getMonth() + monthOffset, 1);
+        const reimbursementsResponse = await api.get('/expense-workspace/reimbursements', { params: { year: selectedMonth.getFullYear(), month: selectedMonth.getMonth() + 1 } });
+        setReimbursements(reimbursementsResponse.data.map(r => ({
+          id: `reintegro-${r.id}`, originalId: r.id, type: 'reintegro', amount: r.amount,
+          description: `Reintegro de ${r.participantName} · ${r.bill?.serviceNameSnapshot || 'Servicio'}${r.bill?.period ? ` (${new Date(r.bill.period).toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })})` : ''}`, date: r.date,
+          categoryName: 'Servicios compartidos', categoryId: null,
+          fundingSource: null,
+        })));
+
         const cuotas = await fetchCuotasPendientes(uid, monthOffset);
         setCuotasPendientes(cuotas);
 
@@ -180,7 +192,8 @@ export default function ExpensesDashboard() {
   );
 
   // últimos 5 movimientos
-  const lastFive = [...transactions].sort((a,b) => parseApiDate(b.date) - parseApiDate(a.date)).slice(0,5);
+  const movementRows = [...transactions, ...reimbursements];
+  const lastFive = [...movementRows].sort((a,b) => parseApiDate(b.date) - parseApiDate(a.date)).slice(0,5);
   
   const nextMonth = new Date(selMonth.getFullYear(), selMonth.getMonth()+1, 1);
   
@@ -207,8 +220,8 @@ export default function ExpensesDashboard() {
   const getFilteredAndSortedTransactions = () => {
     // Primero filtramos por categoría
     let filteredTransactions = selectedCategory === "Todos"
-      ? [...monthTransactions]
-      : [...monthTransactions].filter(tx => tx.categoryName === selectedCategory);
+      ? [...monthTransactions, ...reimbursements]
+      : [...monthTransactions, ...reimbursements].filter(tx => tx.categoryName === selectedCategory);
 
     // Luego aplicamos el ordenamiento según orderByMethod
     const orderByDateLast = (a, b) => parseApiDate(b.date) - parseApiDate(a.date);
@@ -236,7 +249,7 @@ export default function ExpensesDashboard() {
     setOrderByMethod(order);
   };
 
-  const totalExpense = modalList.reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = modalList.filter(t => t.type !== 'reintegro').reduce((sum, t) => sum + t.amount, 0);
 
   const totalIncome = transactions.filter(t => t.type === "ingreso").reduce((sum, t) => sum + t.amount, 0);
 
@@ -311,9 +324,31 @@ export default function ExpensesDashboard() {
         setFormError("Completa todos los campos obligatorios");
         return;
       }
+      if (editingTransaction?.type === "cuota" && !formData.accountingDate) {
+        setFormError("Seleccioná el mes en que querés contabilizar la cuota.");
+        return;
+      }
     
     const token = localStorage.getItem("token");
     if (!token || !userId) return;
+
+    if (editingTransaction?.type === "cuota") {
+      try {
+        await api.put(`/Expenses/cuotas/${editingTransaction.id}/periodo`, {
+          paidAt: new Date(formData.date).toISOString(),
+          accountingDate: new Date(formData.accountingDate).toISOString()
+        }, { headers: { Authorization: `Bearer ${token}` } });
+        setTransactions(await getExpenses(userId, monthOffset));
+        setSuccessMessage("Fecha y período de la cuota actualizados");
+        setShowSuccess(true);
+        resetForm();
+      } catch (error) {
+        console.error("Error al corregir el período de la cuota:", error);
+        const responseData = error.response?.data;
+        setFormError(typeof responseData === 'string' ? responseData : responseData?.message || "No se pudo actualizar el período de la cuota.");
+      }
+      return;
+    }
     
     try {
       const isEditing = !!editingTransaction;
@@ -427,6 +462,16 @@ export default function ExpensesDashboard() {
           </button>
         </div>
 
+        <nav aria-label="Secciones de gastos" className="mb-6 flex w-full flex-wrap gap-2 rounded-xl bg-gray-200 p-2 dark:bg-gray-800">
+          {[
+            { id: 'movimientos', label: 'Movimientos', Icon: List },
+            { id: 'servicios', label: 'Servicios compartidos', Icon: Users },
+            { id: 'impuestos', label: 'Impuestos ARCA', Icon: ReceiptText },
+          ].map(({ id, label, Icon }) => <button key={id} onClick={() => setActiveSection(id)} className={`inline-flex items-center gap-2 rounded-lg px-4 py-2 font-semibold transition-colors ${activeSection === id ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-white dark:text-gray-200 dark:hover:bg-gray-700'}`}>{React.createElement(Icon, { size: 18 })}{label}</button>)}
+        </nav>
+
+        {activeSection === 'movimientos' ? <>
+
         {/* Layout principal en grid */}
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">    
 
@@ -501,8 +546,8 @@ export default function ExpensesDashboard() {
                     </p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="font-bold text-red-600 dark:text-red-400 text-sm sm:text-base">
-                      -{formatCurrency(tx.amount)}
+                    <p className={`font-bold text-sm sm:text-base ${tx.type === 'reintegro' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                      {tx.type === 'reintegro' ? '+' : '-'}{formatCurrency(tx.amount)}
                     </p>
                   </div>
                 </div>
@@ -552,6 +597,8 @@ export default function ExpensesDashboard() {
             </div>
           </div>
         </div>
+
+        </> : <ExpenseWorkspaceSections section={activeSection} />}
 
         {/* Modal de Transacciones Mensuales */}
         <ExpensesList

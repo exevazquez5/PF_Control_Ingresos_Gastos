@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
 import {
   LineChart,
   Line,
@@ -29,21 +28,49 @@ const TimeSeriesChart = () => {
 
       try {
         const config = { headers: { Authorization: `Bearer ${token}` } };
-        const res = await api.get(`/Reports/monthly-summary`, config);
+        const [res, reimbursementsRes] = await Promise.all([
+          api.get(`/Reports/monthly-summary`, config),
+          api.get('/expense-workspace/reimbursements', config).catch(() => ({ data: [] })),
+        ]);
 
-        const processed = res.data.map((item) => {
-          const ingresos = item.ingresos || 0;
-          const gastos = item.gastos || 0;
-          const balance = ingresos - gastos;
-          return {
-            date: `${item.year}-${String(item.month).padStart(2, "0")}`,
-            ingresos,
-            gastos,
-            balance,
-            ahorroPorcentaje:
-              ingresos > 0 ? Math.round((balance / ingresos) * 100) : 0,
-          };
-        });
+        const reimbursementTotals = new Map();
+        for (const reimbursement of reimbursementsRes.data) {
+          const date = new Date(reimbursement.date);
+          const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          reimbursementTotals.set(key, (reimbursementTotals.get(key) || 0) + reimbursement.amount);
+        }
+
+        const monthlyTotals = new Map(res.data.map((item) => [
+          `${item.year}-${String(item.month).padStart(2, "0")}`,
+          { ingresos: item.ingresos || 0, gastos: item.gastos || 0 },
+        ]));
+
+        const earliest = res.data.reduce((min, item) => {
+          const key = item.year * 12 + item.month - 1;
+          return Math.min(min, key);
+        }, Number.POSITIVE_INFINITY);
+        const now = new Date();
+        const latest = now.getFullYear() * 12 + now.getMonth();
+        const processed = [];
+
+        if (Number.isFinite(earliest)) {
+          for (let monthKey = earliest; monthKey <= latest; monthKey += 1) {
+            const year = Math.floor(monthKey / 12);
+            const month = (monthKey % 12) + 1;
+            const date = `${year}-${String(month).padStart(2, "0")}`;
+            const totals = monthlyTotals.get(date) || { ingresos: 0, gastos: 0 };
+            const reintegros = reimbursementTotals.get(date) || 0;
+            const balance = totals.ingresos + reintegros - totals.gastos;
+            processed.push({
+              date,
+              ...totals,
+              reintegros,
+              balance,
+              ahorroPorcentaje:
+                totals.ingresos > 0 ? Math.round((balance / totals.ingresos) * 100) : 0,
+            });
+          }
+        }
 
         setData(processed);
       } catch (error) {
@@ -54,8 +81,11 @@ const TimeSeriesChart = () => {
     fetchData();
   }, []);
 
-  const filteredChartData = data.slice(-chartMonths);
+  const filteredChartData = chartMonths === "all" ? data : data.slice(-chartMonths);
   const totalSaved = filteredChartData.reduce((sum, item) => sum + item.balance, 0);
+  const periodLabel = chartMonths === "all"
+    ? "Todo el historial"
+    : `Últimos ${filteredChartData.length} períodos`;
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6">
@@ -64,7 +94,7 @@ const TimeSeriesChart = () => {
           Evolución Temporal de Ingresos y Gastos
         </h3>
         <div className="flex gap-2">
-          {[3, 6, 9, 12].map((m) => (
+          {[3, 6, 9, 12, "all"].map((m) => (
             <button
                 key={m}
                 className={`px-3 py-1 text-xs rounded transition-colors ${
@@ -74,7 +104,7 @@ const TimeSeriesChart = () => {
                 }`}
                 onClick={() => setChartMonths(m)}
             >
-                {m === 12 ? "1A" : `${m}M`}
+                {m === "all" ? "MAX" : m === 12 ? "1A" : `${m}M`}
             </button>
             ))}
 
@@ -128,6 +158,7 @@ const TimeSeriesChart = () => {
               <Legend />
               <Line type="monotone" dataKey="ingresos" stroke="#10B981" strokeWidth={3} name="Ingresos" dot={{ r: 4 }} />
               <Line type="monotone" dataKey="gastos" stroke="#EF4444" strokeWidth={3} name="Gastos" dot={{ r: 4 }} />
+              <Line type="monotone" dataKey="reintegros" stroke="#F59E0B" strokeWidth={2} name="Reintegros" dot={{ r: 3 }} />
               <Line type="monotone" dataKey="balance" stroke="#3B82F6" strokeWidth={2} name="Balance" strokeDasharray="5 5" dot={{ r: 3 }} />
               <Line type="monotone" dataKey="ahorroPorcentaje" stroke="#A855F7" name="% Ahorro" strokeWidth={2} dot={{ r: 3 }} yAxisId={1} strokeDasharray="2 2" />
             </LineChart>
@@ -142,7 +173,7 @@ const TimeSeriesChart = () => {
             filteredChartData.reduce((sum, item) => sum + item.ingresos, 0) / (filteredChartData.length || 1)
             )}</p>
             <p className="text-xs text-gray-500 mt-1 dark:text-gray-300">
-            Últimos {filteredChartData.length} períodos
+            {periodLabel}
             </p>
           </div>
 
@@ -154,7 +185,7 @@ const TimeSeriesChart = () => {
                 )}
             </p>
             <p className="text-xs text-gray-500 mt-1 dark:text-gray-300">
-              Últimos {filteredChartData.length} períodos
+              {periodLabel}
             </p>
           </div>
 
@@ -184,7 +215,7 @@ const TimeSeriesChart = () => {
                     {formatCurrency(totalSaved)}
                 </p>
                 <p className="text-xs text-gray-500 mt-1 dark:text-gray-300">
-                    Últimos {filteredChartData.length} períodos
+                    {periodLabel}
                 </p>
             </div>
 

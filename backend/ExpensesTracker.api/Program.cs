@@ -42,6 +42,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // HttpClient para integraciones (Brevo)
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient<IncomeUsdService>();
 
 // Registrar servicios
 builder.Services.AddScoped<IExpenseService, ExpenseService>();

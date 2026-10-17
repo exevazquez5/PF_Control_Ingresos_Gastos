@@ -52,6 +52,62 @@ export default function TransactionModal({
           </div>
 
           <div className="space-y-4">
+            {editingTransaction?.type === "cuota" ? (
+              <>
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 dark:border-gray-600 dark:bg-gray-700">
+                  <p className="font-medium text-gray-800 dark:text-white">{editingTransaction.description}</p>
+                  <p className="mt-1 text-sm text-gray-600 dark:text-gray-300">Importe: {formatCurrency(editingTransaction.amount)}</p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+                    Podés corregir el día real de pago y elegir en qué mes contabilizar la cuota. Son datos independientes; las demás cuotas de la compra no cambian.
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-white">
+                    Fecha real de pago
+                  </label>
+                  <input
+                    type="date"
+                    value={formData.date}
+                    max={new Date().toISOString().slice(0, 10)}
+                    onChange={e => {
+                      const nextDate = e.target.value;
+                      const currentAccountingDate = formData.accountingDate || formData.date;
+                      const followsPaymentMonth = currentAccountingDate.slice(0, 7) === formData.date.slice(0, 7);
+                      setFormData({
+                        ...formData,
+                        date: nextDate,
+                        accountingDate: followsPaymentMonth ? nextDate : currentAccountingDate
+                      });
+                    }}
+                    className="w-full rounded-lg border border-gray-300 p-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-white">
+                    Mes en que se contabiliza
+                  </label>
+                  <input
+                    type="month"
+                    value={formData.accountingDate.slice(0, 7)}
+                    max={new Date().toISOString().slice(0, 7)}
+                    onChange={e => setFormData({ ...formData, accountingDate: e.target.value ? `${e.target.value}-01` : '' })}
+                    className="w-full rounded-lg border border-gray-300 p-3 focus:border-transparent focus:ring-2 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                    required
+                  />
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Si corregís la fecha real y el mes contable seguía esa fecha, el mes se ajusta automáticamente.</p>
+                </div>
+                {formError && <div role="alert" className="text-center text-sm font-medium text-red-600">{formError}</div>}
+                <div className="flex gap-3 pt-2">
+                  <button type="button" onClick={resetForm} className="flex-1 rounded-lg bg-gray-200 px-4 py-3 font-medium text-gray-700 transition-colors hover:bg-gray-300">
+                    Cancelar
+                  </button>
+                  <button type="button" onClick={handleSubmit} disabled={!formData.date} className="flex-1 rounded-lg bg-gradient-to-r from-blue-600 to-purple-600 px-4 py-3 font-medium text-white transition-all hover:from-blue-700 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50">
+                    Guardar cambios
+                  </button>
+                </div>
+              </>
+            ) : <>
             {/* Tipo */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1 dark:text-white">
@@ -442,6 +498,7 @@ export default function TransactionModal({
                 {editingTransaction ? "Actualizar" : "Agregar"}
               </button>
             </div>
+            </>}
           </div>
         </div>
       </div>

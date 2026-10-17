@@ -232,9 +232,9 @@ public class CategoryService : ICategoryService
                 && allCategoryIds.Contains(pc.Expense.CategoryId)
                 && pc.Expense.FundingSource != FundingSource.Savings
                 && pc.Status == PagoCuotaStatus.Paid
-                && pc.PaidAt.HasValue
-                && pc.PaidAt >= periodStart
-                && pc.PaidAt <= periodEnd)
+                && (pc.AccountingDate ?? pc.PaidAt).HasValue
+                && (pc.AccountingDate ?? pc.PaidAt) >= periodStart
+                && (pc.AccountingDate ?? pc.PaidAt) <= periodEnd)
             .SumAsync(pc => (decimal?)pc.MontoCuota) ?? 0;
     }
 

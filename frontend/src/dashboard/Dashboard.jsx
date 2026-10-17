@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, Calendar, BarChart3, PieChart, Grid3X3,ChevronLeft, ChevronRight, Wallet, Settings } from 'lucide-react';
-import { PieChart as RechartsPieChart, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, Pie } from 'recharts';
+import { Plus, Edit2, Trash2, TrendingUp, TrendingDown, DollarSign, CreditCard, Archive, RotateCcw, BarChart3, Grid3X3, ChevronLeft, ChevronRight, Wallet, Settings } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import SuccessModal from './SucessModal';
 import TransactionModal from '../features/TransactionModal';
@@ -19,14 +18,12 @@ import {
   addTransaction
 } from '../utils/transactionService';
 import api from '../api/axios.config.js';
-import { createCreditCard, getCreditCards } from "../services/creditCardsService";
+import { archiveCreditCard, createCreditCard, getCreditCards, getDeletedCreditCards, restoreCreditCard, updateCreditCard } from "../services/creditCardsService";
 import { getBudgetProgress, getCurrentBudget, getBudgetByPeriod, createBudget, updateBudget, deleteBudget } from "../services/budgetsService";
 import { getCategoriesFlat } from "../services/categoriesService";
 import { getIncomeSources } from "../services/incomeSourcesService";
 import { parseApiDate, todayInputDate } from "../utils/date";
-import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } from "../utils/transactionTotals";
-
-  const COLORS = ['#4ade80', '#f87171', '#60a5fa']; // verde, rojo, azul
+import { filterByMonth, sumIncomes, sumExpenses, sumReimbursements, sumExpensesByFundingSource } from "../utils/transactionTotals";
 
   const Dashboard = () => {
   const navigate = useNavigate();
@@ -39,8 +36,12 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
   const [enCuotas, setEnCuotas] = useState(false);
   const [cantidadCuotas, setCantidadCuotas] = useState('');
   const [creditCards, setCreditCards] = useState([]);
+  const [archivedCreditCards, setArchivedCreditCards] = useState([]);
   const [selectedCreditCardId, setSelectedCreditCardId] = useState("");
   const [showCreditCardModal, setShowCreditCardModal] = useState(false);
+  const [editingCreditCardId, setEditingCreditCardId] = useState(null);
+  const [showArchivedCreditCards, setShowArchivedCreditCards] = useState(false);
+  const [creditCardError, setCreditCardError] = useState("");
   const [creditCardForm, setCreditCardForm] = useState({ name: "", closingDay: "", dueDay: "" });
 
   // Estado de transacciones
@@ -115,7 +116,9 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
 
   const totalExpenses = sumExpenses(periodTransactions);
 
-  const balance = totalIncome - totalExpenses;
+  const totalReimbursements = sumReimbursements(periodTransactions);
+
+  const balance = totalIncome + totalReimbursements - totalExpenses;
 
   const savingsExpenses = sumExpensesByFundingSource(periodTransactions, "Savings");
 
@@ -343,7 +346,9 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
       categoryId: cuota.expenseCategoryId,
       categoryName: cuota.expenseCategoryNombre,
       amount: cuota.montoCuota,
-      date: cuota.fechaPago,
+      paidAt: cuota.paidAt,
+      accountingDate: cuota.accountingDate,
+      date: cuota.accountingDate || cuota.fechaPago,
       type: "cuota"
     }));
   } catch (err) {
@@ -356,7 +361,7 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
     setLoading(true);
     try {
       const config = { headers: { Authorization: `Bearer ${token}` } };
-      let incomesRes, expensesRes;
+      let incomesRes, expensesRes, reimbursementsRes;
       
       const today = new Date();
       const startOfThis = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
@@ -367,13 +372,17 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
         ? `/Expenses/current-month`
         : `/Expenses/month/${startOfThis.getMonth() + 1}/${startOfThis.getFullYear()}`;
       
-      [incomesRes, expensesRes] = await Promise.all([
+      [incomesRes, expensesRes, reimbursementsRes] = await Promise.all([
         api.get(`/Incomes`, config).catch(err => {
           console.error("Error al cargar ingresos:", err);
           return { data: [] };
         }),
         api.get(expensesUrl, config).catch(err => {
           console.error("Error al cargar gastos:", err);
+          return { data: [] };
+        }),
+        api.get('/expense-workspace/reimbursements', { ...config, params: { year: startOfThis.getFullYear(), month: startOfThis.getMonth() + 1 } }).catch(err => {
+          console.error("Error al cargar reintegros:", err);
           return { data: [] };
         })
       ]);
@@ -388,8 +397,17 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
         ...c,
         type: "cuota"
       }));
+
+      const reimbursements = reimbursementsRes.data.map(r => ({
+        id: `reintegro-${r.id}`,
+        amount: r.amount,
+        description: `Reintegro de ${r.participantName} · ${r.bill?.serviceNameSnapshot || 'Servicio'}${r.bill?.period ? ` (${new Date(r.bill.period).toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })})` : ''}`,
+        date: r.date,
+        categoryName: r.bill?.serviceNameSnapshot || 'Servicios compartidos',
+        type: 'reintegro'
+      }));
       
-      const allTransactions = [...incomes, ...expenses, ...cuotasConvertidas];
+      const allTransactions = [...incomes, ...expenses, ...cuotasConvertidas, ...reimbursements];
       const withCategoryNames = allTransactions.map(t => ({
         ...t,
         category: categories.find(c => c.id === t.categoryId)?.name || 'Sin categoría'
@@ -661,20 +679,66 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
         dueDay: Number(creditCardForm.dueDay),
       };
 
-      const created = await createCreditCard(token, payload);
-      setCreditCards((prev) => [...prev, created]);
+      if (editingCreditCardId) {
+        await updateCreditCard(editingCreditCardId, payload);
+        setCreditCards((prev) => prev.map((card) => card.id === editingCreditCardId ? { ...card, ...payload } : card));
+      } else {
+        const created = await createCreditCard(payload);
+        setCreditCards((prev) => [...prev, created]);
+      }
       setCreditCardForm({ name: "", closingDay: "", dueDay: "" });
-      setShowCreditCardModal(false);
+      setEditingCreditCardId(null);
+      setCreditCardError("");
     } catch (error) {
-      setFormError("No se pudo crear la tarjeta");
+      setCreditCardError(editingCreditCardId ? "No se pudieron guardar los cambios." : "No se pudo agregar la tarjeta.");
     }
   };
 
-  // Pie chart data
-  const chartData = [
-  { name: "Ingresos", value: totalIncome },
-  { name: "Gastos", value: totalExpenses }
-  ];
+  const handleEditCreditCard = (card) => {
+    setEditingCreditCardId(card.id);
+    setCreditCardForm({
+      name: card.name || "",
+      closingDay: String(card.closingDay),
+      dueDay: String(card.dueDay),
+    });
+    setCreditCardError("");
+  };
+
+  const handleArchiveCreditCard = async (card) => {
+    try {
+      await archiveCreditCard(card.id);
+      setCreditCards((prev) => prev.filter((item) => item.id !== card.id));
+      setArchivedCreditCards((prev) => [{ ...card }, ...prev.filter((item) => item.id !== card.id)]);
+      if (String(selectedCreditCardId) === String(card.id)) setSelectedCreditCardId("");
+      if (editingCreditCardId === card.id) {
+        setEditingCreditCardId(null);
+        setCreditCardForm({ name: "", closingDay: "", dueDay: "" });
+      }
+    } catch {
+      setCreditCardError("No se pudo archivar la tarjeta.");
+    }
+  };
+
+  const handleRestoreCreditCard = async (card) => {
+    try {
+      await restoreCreditCard(card.id);
+      setArchivedCreditCards((prev) => prev.filter((item) => item.id !== card.id));
+      setCreditCards((prev) => [...prev, card]);
+    } catch {
+      setCreditCardError("No se pudo restaurar la tarjeta.");
+    }
+  };
+
+  const handleShowArchivedCreditCards = async () => {
+    if (!showArchivedCreditCards) {
+      try {
+        setArchivedCreditCards(await getDeletedCreditCards());
+      } catch {
+        setCreditCardError("No se pudieron cargar las tarjetas archivadas.");
+      }
+    }
+    setShowArchivedCreditCards((current) => !current);
+  };
       
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -744,17 +808,6 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
                 Tarjetas
               </button>
               <button
-                onClick={() => setChartView('pie')}
-                className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
-                  chartView === 'pie'
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-100 dark:hover:bg-gray-500 dark:text-white'
-                }`}
-              >
-                <PieChart className="w-4 h-4" />
-                Torta
-              </button>
-              <button
                 onClick={() => setChartView('temporal')}
                 className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-all ${
                   chartView === 'temporal'
@@ -780,7 +833,14 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
           </div>
 
           {/* Feature para cambiar de Period */}
-          <div className="flex items-center gap-2 mb-4 mt-4 mr-4">
+          <div className="flex flex-wrap items-center justify-end gap-3 mb-4 mt-4 mr-4">
+            <button
+              onClick={() => setShowCreditCardModal(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700"
+            >
+              <CreditCard className="h-4 w-4" />
+              Gestionar tarjetas
+            </button>
             <button
               onClick={() => setMonthOffset(m => m - 1)}
               className="p-1 hover:bg-gray-100 dark:bg-white dark:hover:bg-gray-300 rounded"
@@ -803,15 +863,8 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
         {/* Summary Cards / Charts */}
         <div className="mb-8">
           {chartView === 'default' && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              
-              <BudgetCard
-                progress={budgetProgress}
-                onConfigure={handleOpenBudgetModal}
-                savingsTotal={savingsExpenses}
-                creditTotal={creditExpenses}
-              />
-
+            <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8 border-l-4 border-green-500">
                 <div className="flex items-center justify-between">
                   <div>
@@ -850,75 +903,16 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
                 </div>
               </div>
 
-              
             </div>
-          )}
-
-          {chartView === 'pie' && (
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-8">
-              <h3 className="text-xl font-semibold text-gray-800 mb-6 text-center">Distribución de Ingresos vs Gastos</h3>
-              <div className="flex flex-col lg:flex-row items-center gap-8 w-full">
-
-                <div className="flex-1 w-full" style={{ minHeight: '400px' }}>
-                  <ResponsiveContainer width="100%" height={400}>
-                    <RechartsPieChart>
-                      <Pie
-                        data={chartData}
-                        cx="50%"
-                        cy="50%"
-                        labelLine={false}
-                        label={({ name, value, percent, x, y }) => (
-                          <text
-                            x={x}
-                            y={y}
-                            fill="#ffffff"
-                            fontSize={14}
-                            textAnchor="middle"
-                            dominantBaseline="central"
-                            style={{
-                              textShadow: `
-                                -1px -1px 2px #000, 
-                                1px -1px 2px #000, 
-                                -1px  1px 2px #000, 
-                                1px  1px 2px #000`
-                            }}
-                          >
-                            {`${name}: ${formatCurrency(value)} (${(percent * 100).toFixed(1)}%)`}
-                          </text>
-                        )}
-
-                        outerRadius={120}
-                        fill="#8884d8"
-                        dataKey="value"
-                      >
-                        {chartData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip formatter={(value) => formatCurrency(value)} />
-                      <Legend />
-                    </RechartsPieChart>
-                  </ResponsiveContainer>
-                </div>
-                
-                <div className="flex flex-col gap-4 lg:w-80">
-                  <div className="bg-green-50 p-6 rounded-lg border-l-4 border-green-500 dark:bg-gray-700">
-                    <p className="text-gray-600 text-sm font-medium dark:text-white">Total Ingresos</p>
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncome)}</p>
-                  </div>
-                  <div className="bg-red-50 p-6 rounded-lg border-l-4 border-red-500 dark:bg-gray-700">
-                    <p className="text-gray-600 text-sm font-medium dark:text-white">Total Gastos</p>
-                    <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
-                  </div>
-                  <div className="bg-blue-50 p-6 rounded-lg border-l-4 border-blue-500 dark:bg-gray-700">
-                    <p className="text-gray-600 text-sm font-medium dark:text-white">Balance</p>
-                    <p className={`text-2xl font-bold ${balance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                      {formatCurrency(balance)}
-                    </p>
-                  </div>
-                </div>
-              </div>
+            <div className="mt-6">
+              <BudgetCard
+                progress={budgetProgress}
+                onConfigure={handleOpenBudgetModal}
+                savingsTotal={savingsExpenses}
+                creditTotal={creditExpenses}
+              />
             </div>
+            </>
           )}
 
           {chartView === 'temporal' && (
@@ -928,13 +922,13 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-6">
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 w-full  mx-auto">
+        <div className="mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full mx-auto">
   
               {/* Nueva Transacción ocupa 3 columnas */}
             <button
               onClick={() => setShowModal(true)}
-              className="sm:col-span-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white px-8 sm:px-12 py-5 sm:py-6 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-3 sm:gap-4 shadow-lg text-base sm:text-xl min-h-[64px] sm:min-h-[72px]"
+              className="bg-gradient-to-r from-blue-600 to-purple-600 text-white px-6 py-5 rounded-xl font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200 flex items-center justify-center gap-3 shadow-lg text-base sm:text-lg min-h-[64px]"
             >
               <Plus className="w-5 h-5 sm:w-7 sm:h-7" />
               <span>Nueva Transacción</span>
@@ -943,7 +937,7 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
             {/* Ingresos ocupa 2 columnas */}
             <button
               onClick={() => navigate('/incomes')}
-              className="sm:col-span-2 bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
+              className="bg-gradient-to-r from-green-500 to-green-600 text-white px-6 py-5 rounded-xl font-medium hover:from-green-600 hover:to-green-700 transition-all duration-200 flex items-center justify-center gap-3 shadow-lg text-base min-h-[64px]"
             >
               <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Ingresos</span>
@@ -952,20 +946,11 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
             {/* Gastos ocupa 2 columnas */}
             <button
               onClick={() => navigate('/expenses')}
-              className="sm:col-span-2 bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
+              className="bg-gradient-to-r from-red-500 to-red-600 text-white px-6 py-5 rounded-xl font-medium hover:from-red-600 hover:to-red-700 transition-all duration-200 flex items-center justify-center gap-3 shadow-lg text-base min-h-[64px]"
             >
               <TrendingDown className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Gastos</span>
             </button>
-            
-            <button
-              onClick={() => setShowCreditCardModal(true)}
-              className="sm:col-span-3 bg-gradient-to-r from-indigo-500 to-indigo-600 text-white px-6 py-5 sm:py-6 rounded-xl font-medium hover:from-indigo-600 hover:to-indigo-700 transition-all duration-200 flex items-center justify-center gap-2 sm:gap-3 shadow-lg text-sm sm:text-base min-h-[64px] sm:min-h-[72px]"
-            >
-              <Calendar className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>Agregar tarjeta</span>
-            </button>
-
           </div>
         </div>
 
@@ -1003,52 +988,132 @@ import { filterByMonth, sumIncomes, sumExpenses, sumExpensesByFundingSource } fr
           
         {showCreditCardModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md mx-2 p-6">
-              <h3 className="text-xl font-semibold text-gray-800 mb-4 dark:text-white">Agregar tarjeta</h3>
-              <form onSubmit={handleCreateCreditCard} className="space-y-4">
-                <input
-                  type="text"
-                  value={creditCardForm.name}
-                  onChange={(e) => setCreditCardForm({ ...creditCardForm, name: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-700 dark:text-white"
-                  placeholder="Nombre (opcional)"
-                />
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={creditCardForm.closingDay}
-                  onChange={(e) => setCreditCardForm({ ...creditCardForm, closingDay: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-700 dark:text-white"
-                  placeholder="Día de cierre (1-31)"
-                  required
-                />
-                <input
-                  type="number"
-                  min="1"
-                  max="31"
-                  value={creditCardForm.dueDay}
-                  onChange={(e) => setCreditCardForm({ ...creditCardForm, dueDay: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-700 dark:text-white"
-                  placeholder="Día de vencimiento (1-31)"
-                  required
-                />
-                <div className="flex gap-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreditCardModal(false)}
-                    className="flex-1 px-4 py-3 text-gray-700 bg-gray-200 rounded-lg font-medium hover:bg-gray-300 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
-                  >
-                    Guardar
-                  </button>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl mx-2 p-6 max-h-[90vh] overflow-y-auto">
+              <div className="flex items-center justify-between gap-4 mb-5">
+                <div>
+                  <h3 className="text-xl font-semibold text-gray-800 dark:text-white">Gestionar tarjetas</h3>
+                  <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">Administrá las tarjetas disponibles al registrar gastos.</p>
                 </div>
-              </form>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreditCardModal(false);
+                    setEditingCreditCardId(null);
+                    setCreditCardForm({ name: "", closingDay: "", dueDay: "" });
+                    setCreditCardError("");
+                  }}
+                  className="text-gray-400 hover:text-gray-700 dark:hover:text-white text-2xl"
+                  aria-label="Cerrar gestión de tarjetas"
+                >×</button>
+              </div>
+
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-gray-800 dark:text-white">
+                  {showArchivedCreditCards ? "Tarjetas archivadas" : "Tarjetas activas"}
+                </h4>
+                <button
+                  type="button"
+                  onClick={handleShowArchivedCreditCards}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                >
+                  {showArchivedCreditCards ? "Ver activas" : `Ver archivadas (${archivedCreditCards.length})`}
+                </button>
+              </div>
+
+              <div className="space-y-2 mb-6">
+                {(showArchivedCreditCards ? archivedCreditCards : creditCards).length === 0 ? (
+                  <p className="rounded-lg border border-dashed border-gray-300 dark:border-gray-600 p-4 text-sm text-gray-500 dark:text-gray-300">
+                    {showArchivedCreditCards ? "No hay tarjetas archivadas." : "Todavía no agregaste tarjetas."}
+                  </p>
+                ) : (showArchivedCreditCards ? archivedCreditCards : creditCards).map((card) => (
+                  <div key={card.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+                    <div>
+                      <p className="font-medium text-gray-800 dark:text-white">{card.name || "Tarjeta sin nombre"}</p>
+                      <p className="text-sm text-gray-500 dark:text-gray-300">
+                        Cierra el día {card.closingDay} · Vence el día {card.dueDay}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 self-end sm:self-auto">
+                      {showArchivedCreditCards ? (
+                        <button
+                          type="button"
+                          onClick={() => handleRestoreCreditCard(card)}
+                          className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-gray-700"
+                        ><RotateCcw className="h-4 w-4" /> Restaurar</button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleEditCreditCard(card)}
+                            className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-gray-700"
+                          ><Edit2 className="h-4 w-4" /> Editar</button>
+                          <button
+                            type="button"
+                            onClick={() => handleArchiveCreditCard(card)}
+                            className="inline-flex items-center gap-1 rounded-md px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+                          ><Archive className="h-4 w-4" /> Archivar</button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {!showArchivedCreditCards && (
+                <form onSubmit={handleCreateCreditCard} className="space-y-4 rounded-lg bg-gray-50 dark:bg-gray-900/40 p-4">
+                  <h4 className="font-semibold text-gray-800 dark:text-white">
+                    {editingCreditCardId ? "Editar tarjeta" : "Agregar tarjeta"}
+                  </h4>
+                  <input
+                    type="text"
+                    value={creditCardForm.name}
+                    onChange={(e) => setCreditCardForm({ ...creditCardForm, name: e.target.value })}
+                    className="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-700 dark:text-white"
+                    placeholder="Nombre (opcional)"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={creditCardForm.closingDay}
+                      onChange={(e) => setCreditCardForm({ ...creditCardForm, closingDay: e.target.value })}
+                      className="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-700 dark:text-white"
+                      placeholder="Día de cierre (1-31)"
+                      required
+                    />
+                    <input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={creditCardForm.dueDay}
+                      onChange={(e) => setCreditCardForm({ ...creditCardForm, dueDay: e.target.value })}
+                      className="w-full p-3 border border-gray-300 rounded-lg dark:bg-gray-700 dark:text-white"
+                      placeholder="Día de vencimiento (1-31)"
+                      required
+                    />
+                  </div>
+                  {creditCardError && <p className="text-sm text-red-600 dark:text-red-400">{creditCardError}</p>}
+                  <div className="flex flex-col-reverse sm:flex-row gap-3 pt-1">
+                    {editingCreditCardId && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingCreditCardId(null);
+                          setCreditCardForm({ name: "", closingDay: "", dueDay: "" });
+                          setCreditCardError("");
+                        }}
+                        className="flex-1 px-4 py-3 text-gray-700 bg-gray-200 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+                      >Cancelar edición</button>
+                    )}
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 transition-colors"
+                    >{editingCreditCardId ? "Guardar cambios" : "Agregar tarjeta"}</button>
+                  </div>
+                </form>
+              )}
+              {creditCardError && showArchivedCreditCards && <p className="mt-3 text-sm text-red-600 dark:text-red-400">{creditCardError}</p>}
             </div>
           </div>
         )}

@@ -23,6 +23,12 @@ namespace ExpensesTracker.api.Data
         public DbSet<CreditCard> CreditCards { get; set; }
         public DbSet<Budget> Budgets { get; set; }
         public DbSet<BudgetCategory> BudgetCategories { get; set; }
+        public DbSet<SharedService> SharedServices { get; set; }
+        public DbSet<SharedServiceParticipant> SharedServiceParticipants { get; set; }
+        public DbSet<SharedServiceBill> SharedServiceBills { get; set; }
+        public DbSet<SharedServiceBillShare> SharedServiceBillShares { get; set; }
+        public DbSet<SharedServiceReimbursement> SharedServiceReimbursements { get; set; }
+        public DbSet<TaxObligation> TaxObligations { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -178,6 +184,40 @@ namespace ExpensesTracker.api.Data
 
             modelBuilder.Entity<ExpenseRuleAssignment>()
                 .HasIndex(a => new { a.RuleId, a.Year, a.Month });
+
+            modelBuilder.Entity<SharedService>()
+                .HasMany(s => s.Participants)
+                .WithOne(p => p.Service)
+                .HasForeignKey(p => p.ServiceId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<SharedServiceBill>()
+                .HasOne(b => b.Expense)
+                .WithMany()
+                .HasForeignKey(b => b.ExpenseId)
+                .OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<SharedServiceBill>()
+                .HasIndex(b => new { b.ServiceId, b.Period })
+                .IsUnique();
+            modelBuilder.Entity<SharedServiceBill>()
+                .HasMany(b => b.Shares)
+                .WithOne(s => s.Bill)
+                .HasForeignKey(s => s.BillId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<SharedServiceBill>()
+                .HasMany(b => b.Reimbursements)
+                .WithOne(r => r.Bill)
+                .HasForeignKey(r => r.BillId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<SharedServiceReimbursement>()
+                .HasIndex(r => new { r.UserId, r.Date });
+            modelBuilder.Entity<TaxObligation>()
+                .HasOne(t => t.Expense)
+                .WithMany()
+                .HasForeignKey(t => t.ExpenseId)
+                .OnDelete(DeleteBehavior.SetNull);
+            modelBuilder.Entity<TaxObligation>()
+                .HasIndex(t => new { t.UserId, t.Type, t.Period })
+                .IsUnique(false);
 
             modelBuilder.Entity<Income>()
                 .HasOne(i => i.Source)

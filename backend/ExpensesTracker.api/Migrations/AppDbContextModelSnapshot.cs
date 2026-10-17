@@ -486,6 +486,22 @@ namespace ExpensesTracker.api.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("sourceid");
 
+                    b.Property<decimal?>("UsdMepAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("usdmepamount");
+
+                    b.Property<DateTime?>("UsdMepQuotedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("usdmepquotedat");
+
+                    b.Property<decimal?>("UsdMepRate")
+                        .HasColumnType("numeric")
+                        .HasColumnName("usdmeprate");
+
+                    b.Property<string>("UsdMepSource")
+                        .HasColumnType("text")
+                        .HasColumnName("usdmepsource");
+
                     b.Property<int>("UserId")
                         .HasColumnType("integer")
                         .HasColumnName("userid");
@@ -589,6 +605,282 @@ namespace ExpensesTracker.api.Migrations
                     b.ToTable("incomesourcealiases", (string)null);
                 });
 
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedService", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("CategoryId")
+                        .HasColumnType("integer")
+                        .HasColumnName("categoryid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("createdat");
+
+                    b.Property<int>("DueDay")
+                        .HasColumnType("integer")
+                        .HasColumnName("dueday");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("isarchived");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("provider");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sharedservices");
+
+                    b.ToTable("sharedservices", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceBill", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("DueDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("duedate");
+
+                    b.Property<int?>("ExpenseId")
+                        .HasColumnType("integer")
+                        .HasColumnName("expenseid");
+
+                    b.Property<decimal>("GrossAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("grossamount");
+
+                    b.Property<bool>("OwnerShareWasHistoricalAmount")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ownersharewashistoricalamount");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("paidat");
+
+                    b.Property<DateTime>("Period")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("period");
+
+                    b.Property<string>("ProviderSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("providersnapshot");
+
+                    b.Property<int>("ServiceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("serviceid");
+
+                    b.Property<string>("ServiceNameSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("servicenamesnapshot");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sharedservicebills");
+
+                    b.HasIndex("ExpenseId")
+                        .HasDatabaseName("ix_sharedservicebills_expenseid");
+
+                    b.HasIndex("ServiceId", "Period")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sharedservicebills_serviceid_period");
+
+                    b.ToTable("sharedservicebills", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceBillShare", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AgreedAmount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("agreedamount");
+
+                    b.Property<int>("BillId")
+                        .HasColumnType("integer")
+                        .HasColumnName("billid");
+
+                    b.Property<string>("ParticipantNameSnapshot")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("participantnamesnapshot");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sharedservicebillshares");
+
+                    b.HasIndex("BillId")
+                        .HasDatabaseName("ix_sharedservicebillshares_billid");
+
+                    b.ToTable("sharedservicebillshares", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceParticipant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<bool>("IsOwner")
+                        .HasColumnType("boolean")
+                        .HasColumnName("isowner");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<int>("ServiceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("serviceid");
+
+                    b.Property<decimal>("SharePercent")
+                        .HasColumnType("numeric")
+                        .HasColumnName("sharepercent");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sharedserviceparticipants");
+
+                    b.HasIndex("ServiceId")
+                        .HasDatabaseName("ix_sharedserviceparticipants_serviceid");
+
+                    b.ToTable("sharedserviceparticipants", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceReimbursement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("amount");
+
+                    b.Property<int>("BillId")
+                        .HasColumnType("integer")
+                        .HasColumnName("billid");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("date");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<string>("ParticipantName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("participantname");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sharedservicereimbursements");
+
+                    b.HasIndex("BillId")
+                        .HasDatabaseName("ix_sharedservicereimbursements_billid");
+
+                    b.HasIndex("UserId", "Date")
+                        .HasDatabaseName("ix_sharedservicereimbursements_userid_date");
+
+                    b.ToTable("sharedservicereimbursements", (string)null);
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.TaxObligation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("numeric")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime>("DueDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("duedate");
+
+                    b.Property<int?>("ExpenseId")
+                        .HasColumnType("integer")
+                        .HasColumnName("expenseid");
+
+                    b.Property<DateTime?>("PaidAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("paidat");
+
+                    b.Property<DateTime>("Period")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("period");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("type");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("userid");
+
+                    b.HasKey("Id")
+                        .HasName("pk_taxobligations");
+
+                    b.HasIndex("ExpenseId")
+                        .HasDatabaseName("ix_taxobligations_expenseid");
+
+                    b.HasIndex("UserId", "Type", "Period")
+                        .HasDatabaseName("ix_taxobligations_userid_type_period");
+
+                    b.ToTable("taxobligations", (string)null);
+                });
+
             modelBuilder.Entity("ExpensesTracker.api.Models.User", b =>
                 {
                     b.Property<int>("Id")
@@ -637,6 +929,10 @@ namespace ExpensesTracker.api.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime?>("AccountingDate")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("accountingdate");
 
                     b.Property<DateTime>("DueDate")
                         .HasColumnType("timestamp without time zone")
@@ -915,6 +1211,73 @@ namespace ExpensesTracker.api.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceBill", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.Expense", "Expense")
+                        .WithMany()
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_sharedservicebills_expenses_expenseid");
+
+                    b.HasOne("ExpensesTracker.api.Models.SharedService", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sharedservicebills_sharedservices_serviceid");
+
+                    b.Navigation("Expense");
+
+                    b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceBillShare", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.SharedServiceBill", "Bill")
+                        .WithMany("Shares")
+                        .HasForeignKey("BillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sharedservicebillshares_sharedservicebills_billid");
+
+                    b.Navigation("Bill");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceParticipant", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.SharedService", "Service")
+                        .WithMany("Participants")
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sharedserviceparticipants_sharedservices_serviceid");
+
+                    b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceReimbursement", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.SharedServiceBill", "Bill")
+                        .WithMany("Reimbursements")
+                        .HasForeignKey("BillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_sharedservicereimbursements_sharedservicebills_billid");
+
+                    b.Navigation("Bill");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.TaxObligation", b =>
+                {
+                    b.HasOne("ExpensesTracker.api.Models.Expense", "Expense")
+                        .WithMany()
+                        .HasForeignKey("ExpenseId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_taxobligations_expenses_expenseid");
+
+                    b.Navigation("Expense");
+                });
+
             modelBuilder.Entity("PagoCuota", b =>
                 {
                     b.HasOne("ExpensesTracker.api.Models.Expense", "Expense")
@@ -949,6 +1312,18 @@ namespace ExpensesTracker.api.Migrations
                     b.Navigation("DiscountRules");
 
                     b.Navigation("Incomes");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedService", b =>
+                {
+                    b.Navigation("Participants");
+                });
+
+            modelBuilder.Entity("ExpensesTracker.api.Models.SharedServiceBill", b =>
+                {
+                    b.Navigation("Reimbursements");
+
+                    b.Navigation("Shares");
                 });
 
             modelBuilder.Entity("ExpensesTracker.api.Models.User", b =>
