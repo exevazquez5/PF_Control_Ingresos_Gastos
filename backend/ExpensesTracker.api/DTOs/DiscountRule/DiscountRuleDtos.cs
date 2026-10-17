@@ -96,6 +96,7 @@ namespace ExpensesTracker.api.Dtos.DiscountRule
         public decimal? Monto { get; set; }
         public bool Deduce { get; set; }
         public bool RequiereBruto { get; set; }
+        public bool IsExpected { get; set; }
         public int GastosVinculados { get; set; }
     }
 

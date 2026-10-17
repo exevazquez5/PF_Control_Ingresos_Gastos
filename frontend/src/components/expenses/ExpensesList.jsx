@@ -49,6 +49,7 @@ export default function ExpensesList({
                         {cat.name}
                       </option>
                     ))}
+                  <option value="Servicios compartidos">Reintegros de servicios</option>
                 </select>
               </div>
 
@@ -158,7 +159,7 @@ export default function ExpensesList({
                   </p>
                 </div>
 
-                <div className="flex gap-2">
+                {tx.type !== 'reintegro' && <div className="flex gap-2">
                   <button
                     onClick={() => handleEdit(tx)}
                     className="text-blue-600 hover:text-blue-900 transition-colors p-1 hover:bg-blue-50 dark:hover:bg-gray-400 rounded"
@@ -171,10 +172,10 @@ export default function ExpensesList({
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
-                </div>
+                </div>}
 
-                <div className="font-medium text-red-600 flex-shrink-0 text-sm sm:text-base">
-                  -{formatCurrency(tx.amount)}
+                <div className={`font-medium flex-shrink-0 text-sm sm:text-base ${tx.type === 'reintegro' ? 'text-green-600' : 'text-red-600'}`}>
+                  {tx.type === 'reintegro' ? '+' : '-'}{formatCurrency(tx.amount)}
                 </div>
               </div>
             ))}

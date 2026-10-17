@@ -8,12 +8,20 @@ export function isExpense(t) {
   return t.type === 'gasto' || t.type === 'cuota';
 }
 
+export function isReimbursement(t) {
+  return t.type === 'reintegro';
+}
+
 export function sumIncomes(list) {
   return list.filter(isIncome).reduce((sum, t) => sum + t.amount, 0);
 }
 
 export function sumExpenses(list) {
   return list.filter(isExpense).reduce((sum, t) => sum + t.amount, 0);
+}
+
+export function sumReimbursements(list) {
+  return list.filter(isReimbursement).reduce((sum, t) => sum + t.amount, 0);
 }
 
 export function sumExpensesByFundingSource(list, fundingSource) {

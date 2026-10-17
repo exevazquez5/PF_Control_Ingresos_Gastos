@@ -256,4 +256,46 @@ public class IncomeSourceSnapshotTests : IClassFixture<TestingApiFactory>
         Assert.Equal("Empresa UPDATE", doc.RootElement.GetProperty("sourceName").GetString());
         Assert.Equal("neto", doc.RootElement.GetProperty("mode").GetString());
     }
+
+    [Fact]
+    public async Task Update_ConSourceName_CreaFuenteYLaAsociaAlIngreso()
+    {
+        var client = UserAClient();
+        var create = await client.PostAsJsonAsync("/api/Incomes", new
+        {
+            amount = 1800000m,
+            isRecurring = false,
+            description = "Sueldo historico",
+            date = new DateTime(2026, 10, 1),
+            categoryId = TestingApiFactory.CategoryIngreso,
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.Created, create.StatusCode);
+        using var createdDoc = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
+        var id = createdDoc.RootElement.GetProperty("id").GetInt32();
+
+        var update = await client.PutAsJsonAsync($"/api/Incomes/{id}", new
+        {
+            id,
+            amount = 1800000m,
+            isRecurring = false,
+            description = "Sueldo historico",
+            date = new DateTime(2026, 10, 1),
+            categoryId = TestingApiFactory.CategoryIngreso,
+            sourceName = "Sueldo PS",
+            mode = "bruto",
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.NoContent, update.StatusCode);
+
+        var get = await client.GetAsync($"/api/Incomes/{id}");
+        using var doc = JsonDocument.Parse(await get.Content.ReadAsStringAsync());
+        Assert.True(doc.RootElement.GetProperty("sourceId").GetInt32() > 0);
+        Assert.Equal("Sueldo PS", doc.RootElement.GetProperty("sourceName").GetString());
+        Assert.Equal("bruto", doc.RootElement.GetProperty("mode").GetString());
+
+        var sources = await client.GetAsync("/api/IncomeSources");
+        using var sourcesDoc = JsonDocument.Parse(await sources.Content.ReadAsStringAsync());
+        Assert.Contains(sourcesDoc.RootElement.EnumerateArray(), source => source.GetProperty("name").GetString() == "Sueldo PS");
+    }
 }

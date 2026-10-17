@@ -4,6 +4,7 @@ public class CuotaPagadaDto
     public decimal MontoCuota { get; set; }
     public DateTime DueDate { get; set; }
     public DateTime? PaidAt { get; set; }
+    public DateTime? AccountingDate { get; set; }
     public string Status { get; set; }
 
     // Backward compatibility for existing frontend payload shape

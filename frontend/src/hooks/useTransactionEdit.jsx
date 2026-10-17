@@ -15,7 +15,8 @@ export const useTransactionEdit = (setEditingTransaction, setFormData, setShowMo
       sourceId: transaction.sourceId ?? null,
       sourceName: transaction.sourceName ?? '',
       mode: transaction.mode || 'neto',
-      date: (transaction.expenseDate || transaction.date).split('T')[0],
+      date: (transaction.type === 'cuota' ? transaction.paidAt || transaction.date : transaction.expenseDate || transaction.date).split('T')[0],
+      accountingDate: transaction.type === 'cuota' ? (transaction.accountingDate || transaction.paidAt || transaction.date).split('T')[0] : '',
       description: transaction.description || '',
       categoryId: transaction.categoryId || '',
       fundingSource: transaction.fundingSource || 'Income'

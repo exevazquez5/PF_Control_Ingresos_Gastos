@@ -4,6 +4,11 @@ namespace ExpensesTracker.api.Models
     {
         public int Id { get; set; }
         public decimal Amount { get; set; }
+        /// <summary>MEP sell quote and USD valuation captured for this income.</summary>
+        public decimal? UsdMepRate { get; set; }
+        public DateTime? UsdMepQuotedAt { get; set; }
+        public decimal? UsdMepAmount { get; set; }
+        public string? UsdMepSource { get; set; }
         public decimal? GrossAmount { get; set; }
         public bool IsRecurring { get; set; }
         public string Description { get; set; }

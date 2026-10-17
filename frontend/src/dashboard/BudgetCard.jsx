@@ -54,6 +54,8 @@ const BudgetCard = ({ progress, onConfigure, savingsTotal = 0, creditTotal = 0 }
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 border-l-4 border-purple-500">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(250px,0.9fr)_minmax(0,1.5fr)] lg:gap-8">
+      <div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-purple-100 dark:bg-purple-900 p-2 rounded-full">
@@ -126,11 +128,12 @@ const BudgetCard = ({ progress, onConfigure, savingsTotal = 0, creditTotal = 0 }
           </p>
         )}
       </div>
+      </div>
 
       {categories.length > 0 && (
-        <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-3">
+        <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-4 lg:mt-0 lg:border-t-0 lg:border-l lg:pl-8">
           <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 font-medium">Por categoría</p>
-          <div className="space-y-2 max-h-32 overflow-y-auto">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 max-h-40 overflow-y-auto">
             {categories.map((cat) => (
               <div key={cat.categoryId} className="flex items-center gap-2">
                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${getTrafficLight(cat.percentage)}`} />
@@ -152,6 +155,7 @@ const BudgetCard = ({ progress, onConfigure, savingsTotal = 0, creditTotal = 0 }
           </div>
         </div>
       )}
+      </div>
 
       {(savingsTotal > 0 || creditTotal > 0) && (
         <div className="border-t border-gray-100 dark:border-gray-700 pt-3 mt-3">

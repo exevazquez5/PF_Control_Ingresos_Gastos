@@ -28,8 +28,8 @@ namespace ExpensesTracker.api.Services
                 .ToListAsync();
 
             var cuotasPagadas = await _context.PagosCuotas
-                .Where(pc => pc.Status == PagoCuotaStatus.Paid && pc.PaidAt.HasValue && !pc.Expense.IsDeleted)
-                .GroupBy(pc => new { pc.PaidAt!.Value.Year, pc.PaidAt!.Value.Month })
+                .Where(pc => pc.Status == PagoCuotaStatus.Paid && (pc.AccountingDate ?? pc.PaidAt).HasValue && !pc.Expense.IsDeleted)
+                .GroupBy(pc => new { Year = (pc.AccountingDate ?? pc.PaidAt)!.Value.Year, Month = (pc.AccountingDate ?? pc.PaidAt)!.Value.Month })
                 .Select(g => new {
                     g.Key.Year,
                     g.Key.Month,
@@ -80,8 +80,8 @@ namespace ExpensesTracker.api.Services
                 .ToListAsync();
 
             var cuotasPagadas = await _context.PagosCuotas
-                .Where(pc => pc.Status == PagoCuotaStatus.Paid && pc.PaidAt.HasValue && pc.Expense.UserId == userId && !pc.Expense.IsDeleted)
-                .GroupBy(pc => new { pc.PaidAt!.Value.Year, pc.PaidAt!.Value.Month })
+                .Where(pc => pc.Status == PagoCuotaStatus.Paid && (pc.AccountingDate ?? pc.PaidAt).HasValue && pc.Expense.UserId == userId && !pc.Expense.IsDeleted)
+                .GroupBy(pc => new { Year = (pc.AccountingDate ?? pc.PaidAt)!.Value.Year, Month = (pc.AccountingDate ?? pc.PaidAt)!.Value.Month })
                 .Select(g => new {
                     g.Key.Year,
                     g.Key.Month,

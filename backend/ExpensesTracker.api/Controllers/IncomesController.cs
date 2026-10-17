@@ -1,5 +1,6 @@
 using ExpensesTracker.api.Dtos.Income;
 using ExpensesTracker.api.Interfaces;
+using ExpensesTracker.api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -19,16 +20,18 @@ namespace ExpensesTracker.api.Controllers
         private readonly IIncomeService _incomeService;
         private readonly ICategoryService _categoryService;
         private readonly IIncomeSourceService _incomeSourceService;
+        private readonly IncomeUsdService _incomeUsdService;
 
         // Límite de monto por ingreso (D5): el literal debe ser idéntico al del frontend
         public const decimal MaxAmount = 10000000m;
         public const string MaxAmountMessage = "El monto no puede exceder $10,000,000";
 
-        public IncomesController(IIncomeService incomeService, ICategoryService categoryService, IIncomeSourceService incomeSourceService)
+        public IncomesController(IIncomeService incomeService, ICategoryService categoryService, IIncomeSourceService incomeSourceService, IncomeUsdService incomeUsdService)
         {
             _incomeService = incomeService;
             _categoryService = categoryService;
             _incomeSourceService = incomeSourceService;
+            _incomeUsdService = incomeUsdService;
 
         }
 
@@ -268,6 +271,7 @@ namespace ExpensesTracker.api.Controllers
             };
 
             var created = await _incomeService.Create(income);
+            await _incomeUsdService.CaptureAsync(created);
 
             var result = new IncomeDto
             {
@@ -306,6 +310,11 @@ namespace ExpensesTracker.api.Controllers
             var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
                 return Unauthorized();
+
+            var isAdmin = User.IsInRole("Admin");
+            if (!isAdmin && incomeToUpdate.UserId != userId)
+                return StatusCode(403, "No puedes modificar ingresos de otro usuario.");
+
             // ? Validar que el monto sea mayor a cero
             if (dto.Amount <= 0)
                 return BadRequest("El monto debe ser mayor a cero.");
@@ -351,17 +360,24 @@ namespace ExpensesTracker.api.Controllers
                 if (source == null || source.UserId != userId)
                     return BadRequest("La fuente de ingreso no existe.");
             }
+            else if (!string.IsNullOrWhiteSpace(dto.SourceName))
+            {
+                source = await _incomeSourceService.FindByNameAsync(userId, dto.SourceName.Trim());
+                if (source == null)
+                {
+                    var (newSource, sourceError, _) = await _incomeSourceService.CreateAsync(
+                        userId, dto.SourceName.Trim(), dto.Mode ?? Models.IncomeSource.ModeNeto);
+                    if (newSource == null)
+                        return BadRequest(sourceError);
+                    source = newSource;
+                }
+            }
             var mode = (dto.Mode ?? source?.Mode ?? Models.IncomeSource.ModeNeto).Trim().ToLowerInvariant();
             if (mode != Models.IncomeSource.ModeNeto && mode != Models.IncomeSource.ModeBruto)
                 return BadRequest("El modo debe ser \"neto\" o \"bruto\".");
 
             // En modo bruto no aplica el bruto del recibo (3.5a): lo depositado ES el bruto.
             var grossAmount = mode == Models.IncomeSource.ModeBruto ? (decimal?)null : dto.GrossAmount;
-
-            var isAdmin = User.IsInRole("Admin");
-
-            if (!isAdmin && incomeToUpdate.UserId != userId)
-                return StatusCode(403, "No puedes modificar ingresos de otro usuario.");
 
             incomeToUpdate.Amount = dto.Amount;
             incomeToUpdate.GrossAmount = grossAmount;
@@ -375,6 +391,8 @@ namespace ExpensesTracker.api.Controllers
             var updated = await _incomeService.Update(incomeToUpdate);
             if (!updated)
                 return StatusCode(500, "Error updating income");
+
+            await _incomeUsdService.CaptureAsync(incomeToUpdate);
 
             return NoContent();
         }
@@ -448,6 +466,17 @@ namespace ExpensesTracker.api.Controllers
 
             var overview = await _incomeService.GetOverviewAsync(userId);
             return Ok(overview);
+        }
+
+        [Authorize]
+        [HttpGet("usd-overview")]
+        public async Task<ActionResult<object>> GetUsdOverview([FromQuery] DateTime from, [FromQuery] DateTime to)
+        {
+            var claim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (claim == null || !int.TryParse(claim.Value, out var userId)) return Unauthorized();
+            if (to < from || (to - from).TotalDays > 4000) return BadRequest("El período solicitado no es válido.");
+            var result = await _incomeUsdService.GetOverviewAsync(userId, from.Date, to.Date);
+            return Ok(result);
         }
 
         [Authorize]

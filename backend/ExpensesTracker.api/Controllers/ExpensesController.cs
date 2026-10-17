@@ -257,6 +257,9 @@ public class ExpensesController : ControllerBase
         if (!isAdmin && originalExpense.UserId != userIdFromToken)
             return StatusCode(403, "No puedes modificar gastos de otro usuario.");
 
+        if (await _context.SharedServiceBills.AnyAsync(b => b.ExpenseId == id) || await _context.TaxObligations.AnyAsync(t => t.ExpenseId == id))
+            return Conflict("Este gasto está vinculado a una factura o impuesto. Editalo desde su sección para conservar el historial.");
+
         originalExpense.Amount = dto.Amount;
         originalExpense.Description = dto.Description;
         originalExpense.Date = dto.Date;
@@ -285,6 +288,9 @@ public class ExpensesController : ControllerBase
 
         if (!isAdmin && expense.UserId != userId)
             return StatusCode(403, "No puedes borrar gastos de otro usuario.");
+
+        if (await _context.SharedServiceBills.AnyAsync(b => b.ExpenseId == id) || await _context.TaxObligations.AnyAsync(t => t.ExpenseId == id))
+            return Conflict("Este gasto está vinculado a una factura o impuesto. Gestioná el registro desde su sección para conservar el historial.");
 
 
         var deleted = await _expenseService.ArchiveAsync(id, userId);
@@ -471,6 +477,34 @@ public class ExpensesController : ControllerBase
     }
 
     [Authorize]
+    [HttpPut("cuotas/{id}/periodo")]
+    public async Task<IActionResult> UpdateInstallmentAccountingDate(int id, [FromBody] UpdateInstallmentAccountingDateRequest request)
+    {
+        var subClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        if (subClaim == null || !int.TryParse(subClaim.Value, out var userId))
+            return Unauthorized("Token inválido.");
+
+        var cuota = await _context.PagosCuotas
+            .Include(pc => pc.Expense)
+            .FirstOrDefaultAsync(pc => pc.Id == id);
+        if (cuota == null || cuota.Expense == null || cuota.Expense.UserId != userId)
+            return NotFound();
+        if (cuota.Status != PagoCuotaStatus.Paid || !cuota.PaidAt.HasValue)
+            return BadRequest("Solo se puede corregir el período de una cuota ya pagada.");
+        if (request.PaidAt.Date > DateTime.UtcNow.Date)
+            return BadRequest("La fecha real de pago no puede ser futura.");
+        if (request.AccountingDate.Date > DateTime.UtcNow.Date)
+            return BadRequest("El período contable no puede ser una fecha futura.");
+
+        cuota.PaidAt = request.PaidAt.Date;
+        var accountingMonth = request.AccountingDate;
+        var accountingDay = Min(request.PaidAt.Day, DateTime.DaysInMonth(accountingMonth.Year, accountingMonth.Month));
+        cuota.AccountingDate = new DateTime(accountingMonth.Year, accountingMonth.Month, accountingDay);
+        await _context.SaveChangesAsync();
+        return Ok(new { id = cuota.Id, paidAt = cuota.PaidAt, accountingDate = cuota.AccountingDate });
+    }
+
+    [Authorize]
     [HttpGet("cuotas/{userId}/{anio}/{mes}")]
     public async Task<IActionResult> GetCuotasDelMes(int userId, int anio, int mes)
     {
@@ -512,6 +546,7 @@ public class ExpensesController : ControllerBase
                 MontoCuota = pc.MontoCuota,
                 DueDate = pc.DueDate,
                 PaidAt = pc.PaidAt,
+                AccountingDate = pc.AccountingDate,
                 Status = pc.Status.ToString(),
                 FechaPago = pc.DueDate,
                 Estado = pc.Status.ToString().ToLowerInvariant(),
@@ -548,9 +583,9 @@ public class ExpensesController : ControllerBase
                 .ThenInclude(e => e.Category)
             .Where(pc =>
                 pc.Expense.UserId == userId &&
-                pc.PaidAt.HasValue &&
-                pc.PaidAt.Value.Month == mes &&
-                pc.PaidAt.Value.Year == anio &&
+                (pc.AccountingDate ?? pc.PaidAt).HasValue &&
+                (pc.AccountingDate ?? pc.PaidAt)!.Value.Month == mes &&
+                (pc.AccountingDate ?? pc.PaidAt)!.Value.Year == anio &&
                 pc.Status == PagoCuotaStatus.Paid
             )
             .ToListAsync();
@@ -577,8 +612,9 @@ public class ExpensesController : ControllerBase
                 MontoCuota = pc.MontoCuota,
                 DueDate = pc.DueDate,
                 PaidAt = pc.PaidAt,
+                AccountingDate = pc.AccountingDate,
                 Status = pc.Status.ToString(),
-                FechaPago = pc.PaidAt ?? pc.DueDate,
+                FechaPago = pc.AccountingDate ?? pc.PaidAt ?? pc.DueDate,
                 Estado = pc.Status.ToString().ToLowerInvariant(),
                 ExpenseDescription = pc.Expense.Description,
                 ExpenseCategoryId = pc.Expense.CategoryId,
@@ -700,3 +736,5 @@ public class ExpensesController : ControllerBase
     }
 
 }
+
+public record UpdateInstallmentAccountingDateRequest(DateTime PaidAt, DateTime AccountingDate);

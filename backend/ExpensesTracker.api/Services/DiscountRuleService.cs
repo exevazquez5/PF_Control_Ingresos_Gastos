@@ -23,9 +23,9 @@ namespace ExpensesTracker.api.Services
             _context = context;
         }
 
-        public async Task<List<DiscountRule>> GetByUserIdAsync(int userId, int? sourceId = null)
+        public async Task<List<DiscountRule>> GetByUserIdAsync(int userId, int? sourceId = null, bool includeArchived = false)
         {
-            var query = _context.DiscountRules
+            var query = (includeArchived ? _context.DiscountRules.IgnoreQueryFilters() : _context.DiscountRules)
                 .Include(r => r.IncomeSource)
                 .Include(r => r.LinkedCategory)
                 .Where(r => r.UserId == userId);
@@ -263,13 +263,15 @@ namespace ExpensesTracker.api.Services
                     && !_context.PagosCuotas.Any(pc => pc.ExpenseId == e.Id))
                 .ToListAsync();
 
-            // Cuotas del mes: SOLO las pagadas, por fecha de pago (PaidAt), igual que el
-            // Dashboard (/Expenses/cuotas/pagadas). El vencimiento (DueDate) no decide.
+            // Cuotas pagadas del mes contable: se respeta AccountingDate si fue corregido,
+            // y se usa PaidAt como período por defecto. DueDate no decide.
             var pagosDelMes = await _context.PagosCuotas
                 .Include(pc => pc.Expense)
                 .Where(pc => pc.Expense != null && !pc.Expense.IsDeleted && pc.Expense.UserId == userId
                     && pc.Status == PagoCuotaStatus.Paid
-                    && pc.PaidAt.HasValue && pc.PaidAt.Value >= start && pc.PaidAt.Value < end)
+                    && (pc.AccountingDate ?? pc.PaidAt).HasValue
+                    && (pc.AccountingDate ?? pc.PaidAt)!.Value >= start
+                    && (pc.AccountingDate ?? pc.PaidAt)!.Value < end)
                 .ToListAsync();
 
             // ── Agregado de ingresos por fuente (clasificando por el snapshot de modo) ──
@@ -407,6 +409,7 @@ namespace ExpensesTracker.api.Services
                     Monto = monto,
                     Deduce = deduce,
                     RequiereBruto = requiereBruto,
+                    IsExpected = rule.IsExpected,
                     GastosVinculados = gastosVinculados
                 });
 

@@ -20,12 +20,12 @@ namespace ExpensesTracker.api.Controllers
 
         [HttpGet]
         [Authorize]
-        public async Task<ActionResult<List<DiscountRuleDto>>> GetAll([FromQuery] int? sourceId)
+        public async Task<ActionResult<List<DiscountRuleDto>>> GetAll([FromQuery] int? sourceId, [FromQuery] bool includeArchived = false)
         {
             var userId = GetUserId();
             if (userId == null) return Unauthorized("Token inválido.");
 
-            var rules = await _discountRuleService.GetByUserIdAsync(userId.Value, sourceId);
+            var rules = await _discountRuleService.GetByUserIdAsync(userId.Value, sourceId, includeArchived);
             return Ok(rules.Select(Map).ToList());
         }
 

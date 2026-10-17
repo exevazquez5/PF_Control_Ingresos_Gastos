@@ -17,6 +17,8 @@ namespace ExpensesTracker.api.Dtos.Income
         [Required]
         public int CategoryId { get; set; }
         public int? SourceId { get; set; }
+        /// <summary>Nombre de una fuente nueva o existente cuando no se envía SourceId.</summary>
+        public string? SourceName { get; set; }
         public string? Mode { get; set; }
         [Required]
         public int UserId { get; set; }

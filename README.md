@@ -69,6 +69,8 @@ No existe ambiente QA hosted: **DEV local = DEV + QA**, y la BD local es copia d
 - Todo desarrollo en `feature/*` → **PR a `main`**. `main` está protegida: el check `build` debe pasar, sin force-push ni borrado de rama.
 - El check `build` además ejecuta los tests de integración del backend (`dotnet test`, proyecto `ExpensesTracker.api.Tests`, xUnit + SQLite in-memory). Patrón: 401 sin token y 404 cross-user.
 - Merge a `main` ⇒ deploy automático: Cloudflare Pages (frontend) + Render (backend). Render aplica las migraciones al arrancar.
+- **Flujo de trabajo seguro:** desarrollar solo en una rama `feature/*`; levantar y probar primero con `.dev.ps1` (DEV local); correr `cd frontend; npm test`, `npm run build` y `dotnet test backend/ExpensesTracker.api.Tests/ExpensesTracker.api.Tests.csproj`; revisar la funcionalidad con datos locales; recién entonces abrir PR y esperar el check `build`. No editar ni desplegar desde los dashboards de producción durante el desarrollo.
+- **Producción cambia únicamente al integrar el PR en `main`**, porque las plataformas despliegan automáticamente esa rama. Antes del merge, revisar el diff y las migraciones incluidas; después, verificar health y los flujos afectados en producción. La suite CI reduce riesgos, pero no reemplaza esa revisión funcional.
 - Cloudflare Pages necesita la variable de entorno de build `VITE_API_BASE_URL=https://gastar-app.onrender.com/api` (dashboard de Pages).
 - Verificación post-merge: `/health` + `GET /api/<endpoint nuevo>` (404 → 401 indica código nuevo desplegado).
 

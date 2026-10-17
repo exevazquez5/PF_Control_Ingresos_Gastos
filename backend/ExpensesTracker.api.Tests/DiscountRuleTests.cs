@@ -41,6 +41,35 @@ public class DiscountRuleTests : IClassFixture<TestingApiFactory>
     }
 
     [Fact]
+    public async Task GetAll_IncluyeArchivadasSoloCuandoSeSolicita_YPermiteRestaurarlas()
+    {
+        var client = UserAClient();
+        var sourceId = await CreateSourceAsync(client, "Empresa ARCHIVO");
+        var created = await client.PostAsJsonAsync("/api/DiscountRules", new
+        {
+            incomeSourceId = sourceId,
+            name = "Aporte archivado",
+            fixedAmount = 1500m,
+            userId = TestingApiFactory.UserA
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        using var createdDoc = JsonDocument.Parse(await created.Content.ReadAsStringAsync());
+        var ruleId = createdDoc.RootElement.GetProperty("id").GetInt32();
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/DiscountRules/{ruleId}/archive", null)).StatusCode);
+        using (var activeDoc = JsonDocument.Parse(await (await client.GetAsync($"/api/DiscountRules?sourceId={sourceId}")).Content.ReadAsStringAsync()))
+            Assert.Empty(activeDoc.RootElement.EnumerateArray());
+
+        using (var archivedDoc = JsonDocument.Parse(await (await client.GetAsync($"/api/DiscountRules?sourceId={sourceId}&includeArchived=true")).Content.ReadAsStringAsync()))
+        {
+            var archived = Assert.Single(archivedDoc.RootElement.EnumerateArray());
+            Assert.True(archived.GetProperty("isArchived").GetBoolean());
+        }
+
+        Assert.Equal(HttpStatusCode.NoContent, (await client.PostAsync($"/api/DiscountRules/{ruleId}/restore", null)).StatusCode);
+    }
+
+    [Fact]
     public async Task Create_FijaY_Porcentaje_DeOk()
     {
         var client = UserAClient();
