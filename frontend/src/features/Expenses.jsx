@@ -440,7 +440,11 @@ export default function ExpensesDashboard() {
       
     } catch (error) {
       console.error("Error al guardar la transacción:", error);
-      setFormError(error.response?.data?.message || "Error al guardar la transacción");
+      const responseData = error.response?.data;
+      const message = typeof responseData === "string"
+        ? responseData
+        : responseData?.message || responseData?.detail || "Error al guardar la transacción";
+      setFormError(message);
     }
   };
 

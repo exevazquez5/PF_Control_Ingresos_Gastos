@@ -242,6 +242,50 @@ public class ExpenseWorkspaceController(AppDbContext db) : ControllerBase
         return Ok(ToBillDto(await db.SharedServiceBills.Include(b => b.Shares).Include(b => b.Reimbursements).FirstAsync(b => b.Id == id)));
     }
 
+    [HttpPut("bills/{id:int}/amount")]
+    public async Task<IActionResult> UpdateBillAmount(int id, UpdateBillAmountInput input)
+    {
+        if (CurrentUserId is not int userId) return Unauthorized();
+        if (input.GrossAmount <= 0 || decimal.Round(input.GrossAmount, 2) != input.GrossAmount)
+            return BadRequest("Ingresá un importe válido mayor a cero, con hasta dos decimales.");
+
+        var bill = await db.SharedServiceBills.Include(b => b.Shares).Include(b => b.Reimbursements)
+            .FirstOrDefaultAsync(b => b.Id == id && b.UserId == userId);
+        if (bill is null) return NotFound();
+        if (bill.GrossAmount <= 0) return Conflict("No se puede recalcular una factura con un total anterior inválido.");
+
+        var correctedShares = bill.Shares.Select(share => new
+        {
+            Share = share,
+            Amount = decimal.Round(input.GrossAmount * share.AgreedAmount / bill.GrossAmount, 2)
+        }).ToList();
+        foreach (var corrected in correctedShares)
+        {
+            var received = bill.Reimbursements.Where(r => r.ParticipantName == corrected.Share.ParticipantNameSnapshot)
+                .Sum(r => r.Amount);
+            if (corrected.Amount < received)
+                return Conflict($"El nuevo total dejaría la parte de {corrected.Share.ParticipantNameSnapshot} por debajo de los reintegros ya registrados. Corregí primero esos reintegros o ingresá un total mayor.");
+        }
+
+        Expense? linkedExpense = null;
+        if (bill.ExpenseId.HasValue)
+        {
+            linkedExpense = await db.Expenses.FirstOrDefaultAsync(e => e.Id == bill.ExpenseId.Value && e.UserId == userId);
+            if (linkedExpense is null) return Conflict("No se encontró el gasto asociado a esta factura. El total no se modificó.");
+        }
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        bill.GrossAmount = input.GrossAmount;
+        foreach (var corrected in correctedShares)
+            corrected.Share.AgreedAmount = corrected.Amount;
+        if (linkedExpense is not null)
+            linkedExpense.Amount = input.GrossAmount;
+
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+        return Ok(ToBillDto(bill));
+    }
+
     [HttpPut("bills/{id:int}/shares")]
     public async Task<IActionResult> UpdateShares(int id, SharesInput input)
     {
@@ -388,6 +432,7 @@ public class ExpenseWorkspaceController(AppDbContext db) : ControllerBase
     public record ImportBillItem(int ExpenseId, int ServiceId, DateTime Period);
     public record ImportBillsInput(List<ImportBillItem> Items, bool ExpenseAmountsAreOwnerShare = false);
     public record PayInput(DateTime PaidAt);
+    public record UpdateBillAmountInput(decimal GrossAmount);
     public record ShareInput(string Name, decimal Amount);
     public record SharesInput(List<ShareInput> Shares);
     public record ReimbursementInput(string ParticipantName, decimal Amount, DateTime Date, string? Note);
