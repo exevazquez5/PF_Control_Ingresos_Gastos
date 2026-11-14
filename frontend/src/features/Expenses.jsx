@@ -65,7 +65,6 @@ export default function ExpensesDashboard() {
 
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
-  const [reimbursements, setReimbursements] = useState([]);
   const [categories, setCategories] = useState([]);
   const [allCategories, setAllCategories] = useState([]);
   const [incomeSources, setIncomeSources] = useState([]);
@@ -84,6 +83,7 @@ export default function ExpensesDashboard() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [successMessage, setSuccessMessage] = useState("Cambios guardados");
   const [selectedCategory, setSelectedCategory] = useState("Todos"); 
+  const [selectedFundingSource, setSelectedFundingSource] = useState("Todos");
   const [confirmDelete, setConfirmDelete] = useState({ show: false, target: null, type: "" });
   const [editingTransaction, setEditingTransaction] = useState(null);
   const [showPayAllModal, setShowPayAllModal] = useState(false);
@@ -148,15 +148,6 @@ export default function ExpensesDashboard() {
         const txs = await getExpenses(uid, monthOffset); // <--- uid en vez de userId
         setTransactions(txs);
 
-        const selectedMonth = new Date(new Date().getFullYear(), new Date().getMonth() + monthOffset, 1);
-        const reimbursementsResponse = await api.get('/expense-workspace/reimbursements', { params: { year: selectedMonth.getFullYear(), month: selectedMonth.getMonth() + 1 } });
-        setReimbursements(reimbursementsResponse.data.map(r => ({
-          id: `reintegro-${r.id}`, originalId: r.id, type: 'reintegro', amount: r.amount,
-          description: `Reintegro de ${r.participantName} · ${r.bill?.serviceNameSnapshot || 'Servicio'}${r.bill?.period ? ` (${new Date(r.bill.period).toLocaleDateString('es-AR', { month: 'long', year: 'numeric', timeZone: 'UTC' })})` : ''}`, date: r.date,
-          categoryName: 'Servicios compartidos', categoryId: null,
-          fundingSource: null,
-        })));
-
         const cuotas = await fetchCuotasPendientes(uid, monthOffset);
         setCuotasPendientes(cuotas);
 
@@ -192,8 +183,7 @@ export default function ExpensesDashboard() {
   );
 
   // últimos 5 movimientos
-  const movementRows = [...transactions, ...reimbursements];
-  const lastFive = [...movementRows].sort((a,b) => parseApiDate(b.date) - parseApiDate(a.date)).slice(0,5);
+  const lastFive = [...transactions].sort((a,b) => parseApiDate(b.date) - parseApiDate(a.date)).slice(0,5);
   
   const nextMonth = new Date(selMonth.getFullYear(), selMonth.getMonth()+1, 1);
   
@@ -220,8 +210,12 @@ export default function ExpensesDashboard() {
   const getFilteredAndSortedTransactions = () => {
     // Primero filtramos por categoría
     let filteredTransactions = selectedCategory === "Todos"
-      ? [...monthTransactions, ...reimbursements]
-      : [...monthTransactions, ...reimbursements].filter(tx => tx.categoryName === selectedCategory);
+      ? [...monthTransactions]
+      : monthTransactions.filter(tx => tx.categoryName === selectedCategory);
+
+    if (selectedFundingSource !== "Todos") {
+      filteredTransactions = filteredTransactions.filter(tx => tx.type !== 'reintegro' && tx.fundingSource === selectedFundingSource);
+    }
 
     // Luego aplicamos el ordenamiento según orderByMethod
     const orderByDateLast = (a, b) => parseApiDate(b.date) - parseApiDate(a.date);
@@ -249,7 +243,7 @@ export default function ExpensesDashboard() {
     setOrderByMethod(order);
   };
 
-  const totalExpense = modalList.filter(t => t.type !== 'reintegro').reduce((sum, t) => sum + t.amount, 0);
+  const totalExpense = modalList.reduce((sum, t) => sum + t.amount, 0);
 
   const totalIncome = transactions.filter(t => t.type === "ingreso").reduce((sum, t) => sum + t.amount, 0);
 
@@ -610,6 +604,8 @@ export default function ExpensesDashboard() {
           setShowMonthlyModal={setShowMonthlyModal}
           selectedCategory={selectedCategory}
           setSelectedCategory={setSelectedCategory}
+          selectedFundingSource={selectedFundingSource}
+          setSelectedFundingSource={setSelectedFundingSource}
           categories={categories}
           orderByMethod={orderByMethod}
           ordenarTransacciones={ordenarTransacciones}
