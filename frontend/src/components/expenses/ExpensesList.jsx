@@ -8,6 +8,8 @@ export default function ExpensesList({
   setShowMonthlyModal,
   selectedCategory,
   setSelectedCategory,
+  selectedFundingSource,
+  setSelectedFundingSource,
   categories,
   orderByMethod,
   ordenarTransacciones,
@@ -26,7 +28,7 @@ export default function ExpensesList({
         <div className="p-4 sm:p-6 pb-0">
           {/* Filtros */}
           <div>
-            <div className="flex items-end gap-4 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-end gap-3 sm:gap-4 mb-4">
               {/* Filtro de categoría */}
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-white">
@@ -49,12 +51,32 @@ export default function ExpensesList({
                         {cat.name}
                       </option>
                     ))}
-                  <option value="Servicios compartidos">Reintegros de servicios</option>
+                </select>
+              </div>
+
+              {/* Filtro de origen del dinero */}
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-white">
+                  Filtrar por origen
+                </label>
+                <select
+                  value={selectedFundingSource}
+                  onChange={(e) => setSelectedFundingSource(e.target.value)}
+                  className="w-full p-3 rounded-lg bg-gray-50/50 border-0 text-gray-900
+                    ring-1 ring-gray-200/60 focus:ring-2 focus:ring-blue-500 focus:bg-white
+                    hover:ring-gray-300/80 transition-all duration-150
+                    dark:bg-gray-800/50 dark:text-gray-100
+                    dark:ring-gray-700/60 dark:focus:bg-gray-800 dark:hover:ring-gray-600/80"
+                >
+                  <option value="Todos">Todos los orígenes</option>
+                  <option value="Income">Ingresos</option>
+                  <option value="Savings">Ahorros</option>
+                  <option value="Credit">Tarjeta</option>
                 </select>
               </div>
 
               {/* Select para ordenamiento */}
-              <div className="flex-shrink-0 min-w-[200px]">
+              <div className="flex-1 sm:flex-shrink-0 sm:min-w-[200px]">
                 <label className="block text-sm font-medium text-gray-700 mb-2 dark:text-white">
                   Ordenar por
                 </label>
